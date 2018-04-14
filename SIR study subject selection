@@ -133,13 +133,6 @@ imd<-read.csv("IMD2010.csv") #Call data from lookup table (see Open Source Resou
 imd<-imd[,c("LSOA","IMD_Decile2010")]
 crea<-merge(crea,imd,all.x=TRUE)
 
-#Add practise data
-a<-unique(sir.data$Source)
-codes<-read.table("ccg-practice-list.csv",header=TRUE,sep=",") #Call data from lookup table (see Open Source Resources repo)
-length(codes$Code)
-a<-merge(a,codes,all.x=TRUE)
-crea<-merge(crea,a,all.x=TRUE)
-
 #LIMIT TO PATIENTS WITH AT LEAST 2 POST 2008 CREATININE TEST VALUES
 
 crea<-crea[as.numeric(year(strptime(crea$event.date, format="%Y-%m-%d")))>=2008,]
@@ -164,4 +157,35 @@ ranges$x[,2] - ranges$x[,1] -> ranges$range
 ranges[(which(ranges$range<2)),1] -> range_short_ids    # define exclusion range as 2 years
 
 crea.rep[-which(crea.rep$PatientID %in% range_short_ids),]->crea.rep 
+
+#ADD ON PRACTISE INFO TO CREA.REP
+prac<-read.csv("PractiseKeySIR.csv")
+pats<-merge(sir.data,prac,all.x=TRUE)
+pats<-pats[!is.na(pats$Source),]
+pats<-pats[!pats$Source=="",]
+pats1<-pats[pats$Source=="salfordt",]
+pats1<-pats1[,c(1,2,4)]
+pats2<-pats[!pats$Source=="salfordt",]
+pats2<-pats2[!duplicated(pats2[,c(2,4)],fromLast=TRUE),]
+pats2<-pats2[,c(1,2,4,5,7)]
+colnames(pats2)[1]<-"Source2"
+pats3<-merge(pats1,pats2,all=TRUE)
+pats3$Source2<-ifelse(is.na(pats3$Source2),paste(pats3$Source),paste(pats3$Source2))
+pats3<-pats3[,c(1,2,4:6)]
+colnames(pats3)[3]<-"Source"
+pats3<-unique(pats3)
+table(pats3$Source)
+length(pats3$Source)
+crea.rep<-merge(crea.rep,pats3,all.x=TRUE)
+
+#Add a random practise ID for splitting the data
+Source<-unique(crea.rep$Source[!crea.rep$Source=="salfordt"])
+Source<-Source[c(1:38,40:57)] #remove NA row (hospital)
+s1<-as.data.frame(Source)
+randompracID<-sample(1:56, 56)
+s2<-as.data.frame(randompracID)
+s3<-cbind(s1,s2)
+crea.rep<-merge(crea.rep,s3,all.x=TRUE)
+crea.rep$randompracID<-ifelse(crea.rep$Source=="salfordt",0,crea.rep$randompracID)
+
 save(crea.rep,file="crea.rep2yrsall.rda")
