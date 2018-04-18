@@ -145,5 +145,20 @@ table(rare)
 crea[!(crea$PatientID %in% ids[rare]),] -> crea.rep	
 levels(unique(as.factor(crea.rep$PatientID))) # 198543 adult hf patients have 2 or more creatinine tests
 length(crea.rep$PatientID) #1579775 rows remaining
+##########################################################################
+
+#SELECT PATIENTS WHICH HAVE AT LEAST 2 TESTS AND AT LEAST 2 YEARS DATA
+#FIND MIN AND MAX DATES PER PATIENT
+x<-CPRD2[,c(1,2)]
+x1<-x %>% 
+group_by(patid) %>%
+summarize(start=min(eventdate),end=max(eventdate)) %>%
+as.data.frame
+x1$range<-as.numeric(as.character(x1$end-x1$start))
+
+x1[(which(x1$range<2)),1] -> range_short_ids    # define exclusion range as 2 years
+crea[-which(crea$PatientID %in% range_short_ids),]->crea.rep 
+length(unique(crea.rep$PatientID))
+save(crea.rep,file="crea.rep.rda")
 
 save(crea,file="crea.repongoing.rda")
