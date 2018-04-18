@@ -1,5 +1,10 @@
-library(dplyr)
+#########################################################
+#VARIABLES WITH START AND ONGOING DATES- MATCH FIRST OCCURENCE
+##########################################################
+#THE FOLLOWING VARIABLES ARE CREATED BASED ON LOOKUP TABLES OF CLINICAL CODES USED TO QUERY AN EHR EXTRACT TABLE.
+#THREE COLUMNS ARE CREATED FOR EACH METRIC- TIME SINCE EVENT (DaysSince*), EVENT DATE (*Date), AND A BINARY MARKER (Condition_name) SHOWING EVER OCCURENCE
 
+library(dplyr)
 ################################################################################
 #ATRIAL FIBRILLATION
 AF1<-read.csv("AF1.csv")
