@@ -16,6 +16,7 @@ pats2<-pats2[,c(1,2,5,15,16)]
 colnames(pats2)[1]<-"Source2"
 colnames(pats2)[5]<-"CCG2"
 pats3<-merge(pats1,pats2,all=TRUE)
+
 pats3$Source2<-ifelse(is.na(pats3$Source2),paste(pats3$Source),paste(pats3$Source2))
 pats3$CCG2<-ifelse(is.na(pats3$CCG2),paste(pats3$CCG),paste(pats3$CCG2))
 
@@ -26,16 +27,17 @@ colnames(pats3)[5]<-"CCG"
 pats3<-unique(pats3)
 table(pats3$Source)
 length(pats3$Source)
+
 crea.rep<-merge(crea.rep,pats3,all.x=TRUE)
 
 #Add a random practise ID for splitting the data
 Source<-unique(crea.rep$Source[!crea.rep$Source=="salfordt"&!is.na(crea.rep$Source)])
 s1<-as.data.frame(Source)
 set.seed(111)
-randompracID<-sample(1:56, 56)
+randompracID<-sample(1:57, 57)
 s2<-as.data.frame(randompracID)
 s3<-cbind(s1,s2)
 crea.rep<-merge(crea.rep,s3,all.x=TRUE)
 crea.rep$randompracID<-ifelse(crea.rep$Source=="salfordt",0,crea.rep$randompracID)
-
+#0 now = salfort trust hospital
 save(crea.rep,file="crea.repongoing.rda")
