@@ -3,7 +3,7 @@ load("crea.rep.rda") #Primary table, 1 row per patient per date, summarising max
 load("sir.data.Rdata") #Full EHR extract table
 
 #ADD ON PRACTISE INFO TO CREA.REP
-prac<-read.csv("PractiseKeySIR.csv") #LOOKUP OF PRACTISE DATA
+prac<-read.csv("PractiseKeySIR.csv") #LOOKUP OF PRACTISE DATA ANNOTATED WITH WHETHER IN SALFORD OR OUTSIDE
 pats<-merge(sir.data,prac,all.x=TRUE)
 pats<-pats[!is.na(pats$Source),]
 pats<-pats[!pats$Source=="",]
