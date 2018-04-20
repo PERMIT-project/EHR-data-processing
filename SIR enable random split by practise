@@ -1,6 +1,6 @@
 memory.size<-100000 #Assign sufficient memory to R
 load("crea.rep.rda") #Primary table, 1 row per patient per date, summarising max creatinine per day
-load("sir.data.Rdata") #Full EHR extract table
+load("sirdatahfonly.rda") #EHR extract table with data for HF patients only (can also use full EHR data tablehead(sir.data))
 
 #ADD ON PRACTISE INFO TO CREA.REP
 prac<-read.csv("PractiseKeySIR.csv") #LOOKUP OF PRACTISE DATA ANNOTATED WITH WHETHER IN SALFORD OR OUTSIDE
@@ -8,24 +8,31 @@ pats<-merge(sir.data,prac,all.x=TRUE)
 pats<-pats[!is.na(pats$Source),]
 pats<-pats[!pats$Source=="",]
 pats1<-pats[pats$Source=="salfordt",]
-pats1<-pats1[,c(1,2,4)]
+pats1<-pats1[,c(1,2,5,15,16)]
+
 pats2<-pats[!pats$Source=="salfordt",]
-pats2<-pats2[!duplicated(pats2[,c(2,4)],fromLast=TRUE),]
-pats2<-pats2[,c(1,2,4,5,7)]
+pats2<-pats2[!duplicated(pats2[,c(2,5)],fromLast=TRUE),]
+pats2<-pats2[,c(1,2,5,15,16)]
 colnames(pats2)[1]<-"Source2"
+colnames(pats2)[5]<-"CCG2"
 pats3<-merge(pats1,pats2,all=TRUE)
 pats3$Source2<-ifelse(is.na(pats3$Source2),paste(pats3$Source),paste(pats3$Source2))
-pats3<-pats3[,c(1,2,4:6)]
+pats3$CCG2<-ifelse(is.na(pats3$CCG2),paste(pats3$CCG),paste(pats3$CCG2))
+
+pats3<-pats3[,c(1,2,5,15,16)]
 colnames(pats3)[3]<-"Source"
+colnames(pats3)[3]<-"CCG"
+
 pats3<-unique(pats3)
 table(pats3$Source)
 length(pats3$Source)
 crea.rep<-merge(crea.rep,pats3,all.x=TRUE)
 
 #Add a random practise ID for splitting the data
-Source<-unique(crea.rep$Source[!crea.rep$Source=="salfordt"])
+Source<-unique(crea.rep$Source[!crea.rep$Source=="salfordt"&!is.na(crea.rep$Source)])
 Source<-Source[c(1:38,40:57)] #remove NA row (hospital)
 s1<-as.data.frame(Source)
+set.seed(111)
 randompracID<-sample(1:56, 56)
 s2<-as.data.frame(randompracID)
 s3<-cbind(s1,s2)
