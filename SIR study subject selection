@@ -21,14 +21,17 @@ hf<-sir.data[sir.data$ReadCode %in% HeartFailure1.csv$ReadCode,] #Create subset 
 hf$Age<-(as.numeric(year(strptime(hf$EntryDate, format="%Y%m%d"))))-hf$BirthYear
 hf$hfage<-hf$Age
 smalltab<-hf[,c("PatientID","hfage")]
+smalltab$PatientID<-as.factor(smalltab$PatientID)
+smalltab<-smalltab[!is.na(smalltab$hfage),]
 
 first<-smalltab %>% group_by(PatientID) %>%
-summarize(hfage = min(as.numeric(hfage)))
+slice(which.min(hfage))
 ungroup(first)
 head(first)
 
 sir.data<-merge(sir.data[sir.data$PatientID %in% hf$PatientID,],as.data.frame(first),all.x=TRUE)
 sir.data<-sir.data[sir.data$hfage>=18,]
+
 #length(unique(as.factor(sir.data$PatientID))) #number of patients 18 or over at first diagnosis
 save(sir.data,file="sirdatahfonly.rda")
 ####################################################################################
