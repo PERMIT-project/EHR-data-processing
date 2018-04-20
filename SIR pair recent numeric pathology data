@@ -10,7 +10,7 @@ library(lubridate)
 
 #######################################################
 
-load("crea.rephf2tests.Rdata") #primary table
+load("crea.rephf2testsd.Rdata") #primary table
 load("sirdatahfonly.rda") #full table containing all patient data
 
 sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
