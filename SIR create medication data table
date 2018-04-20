@@ -60,7 +60,8 @@ write.csv(ESS,file="EXTRADESCS.csv") #OUTPUT ANY NON PARSING DESCRIPTIONS. ADD T
 
 EX<-sub$DESCRIPTION[grep("extra",sub$DESCRIPTION)]
 AD<-sub$DESCRIPTION[grep("additionto",sub$DESCRIPTION)]
-sub$EXTRA<-ifelse(sub$DESCRIPTION %in% AD | sub$DESCRIPTION %in% EX,1,0)
+AD2<-sub$DESCRIPTION[grep("additional",sub$DESCRIPTION)]
+sub$EXTRA<-ifelse(sub$DESCRIPTION %in% AD | sub$DESCRIPTION %in% AD2 |sub$DESCRIPTION %in% EX,1,0)
 #'EXTRA' MARKS PRESCRIPTIONS THAT ARE ADDITIONS OF MORE TO THE SAME DRUG, 
 #OFTEN SUPPLEMENTING BOXED MEDICATION (E.G. 'TAKE AN EXTRA TABLET EVERY MORNING WITH THE ONE IN YOUR VENALINK').
 ############################################################################# 
