@@ -1,0 +1,5 @@
+#Designate patients with no local GP codes
+
+home<-crea.rep[!crea.rep$Source=="salfordt" & crea.rep$PracCat=="Salford",]
+unique(crea.rep$PatientID[crea.rep$PatientID %in% home$PatientID])
+crea.rep$ReferredIn<-ifelse(crea.rep$PatientID %in% home$PatientID,0,1)
