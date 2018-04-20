@@ -45,9 +45,7 @@ NS<-read.table("NSAIDSd.txt",header=FALSE,sep=",")
 NS<-unique(NS)
 colnames(NS) <- c("PatientID","NSAIDdesc","event.date")
 NSAIDlist<-NS[!duplicated(NS$NSAIDdesc),c("NSAIDdesc")]
-old<-read.csv("NSAIDlistOLD.csv")
-NSAIDlist[!NSAIDlist %in% old$NSAIDdesc]
-write.csv(NSAIDlist,file="NSAIDlist0603.csv",row.names=FALSE) 
+write.csv(NSAIDlist,file="NSAIDlist.csv",row.names=FALSE) 
 #ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
 
 NS2<-read.csv("NSAIDlist0603.csv")
@@ -81,12 +79,11 @@ P$event.date<-smalltab$event.date[i]
 P<-P[order(P$PatientID,P$event.date) , ]
 write.table(P,file="ARBSd28.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
 
-
 NS<-read.table("ARBSd28.txt",header=FALSE,sep=",")
 NS<-unique(NS)
 colnames(NS) <- c("PatientID","ARBdesc","event.date")
 ARBlist<-NS[!duplicated(NS$ARBdesc),c("ARBdesc")]
-write.csv(ARBlist,file="ARBlist0603.csv",row.names=FALSE) 
+write.csv(ARBlist,file="ARBlist.csv",row.names=FALSE) 
 #ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
 
 NS2<-read.csv("ARBlist0603.csv")
