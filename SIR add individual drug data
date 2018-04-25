@@ -4,16 +4,8 @@ library(tidyverse)
 
 load("crea.rep.rda")
 load("PERMITmeddata28.rda") #LOAD ANNOTATED DRUG TABLE WITH ALL DATED PRECRIPTION ENTRIES PER PATIENT
-meddata<-unique(meddata)
- 
-meddata$DAILY_DOSE<-signif(meddata$DAILY_DOSE,digits=2)
-meddata$FAMILY<-ifelse(meddata$TYPE=="Doxycycline",paste("Antimicrobial"),paste(meddata$FAMILY))
-meddata$FAMILY<-ifelse(meddata$TYPE=="Chloretracycline",paste("Chlortetracycline"),paste(meddata$FAMILY))
-meddata$EntryDate<-as.Date(meddata$EntryDate,format="%d/%m/%Y")
-meddata$END_DATE<-as.Date(meddata$END_DATE,format="%d/%m/%Y")
 
 #LOOP THROUGH DRUGS
-meddata$TYPE<-ifelse(meddata$TYPE=="Hydrochlorothiazide",paste("Hydrochlorthiazide"),paste(meddata$TYPE))
 
 for (z in (61:length(unique(meddata$TYPE))) ){
 for (z in (34:length(unique(meddata$TYPE))) ){
