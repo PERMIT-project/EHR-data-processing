@@ -72,7 +72,7 @@ dataset<-merge(dataset, temp_dataset,all=TRUE)
  
  dataset$PatientID<-as.factor(dataset$PatientID)
  
- crea.rep<-merge(crea.rep,d1,all.x=TRUE)
+ crea.rep<-merge(crea.rep,dataset,all.x=TRUE)
 
 
 #NB IF YOU RECEIVE ERROR MESSAGES AFTER THE LOOPS, CHECK THAT OLD VERSIONS OF dataset OR d1 
