@@ -32,7 +32,7 @@ N<-N[!is.na(N$PatientID),]
 #ADD COLUMN HEADERS
 #REMOVE UNWANTED COLUMNS
 
-write.table(N,file=paste0(unique(meddata$TYPE)[z],'Np'),append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") 
+write.table(N,file=paste0(unique(meddata$TYPE)[z],'NX'),append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") 
 }}
 
 #MANUALLY CHECK AND DELETE (OR PERL) ANY NX FILES WHICH HAVE A SIZE OF 0KB (NO LINES)
