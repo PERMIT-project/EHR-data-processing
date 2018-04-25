@@ -206,4 +206,16 @@ ex[!is.na(ex$TYPE),] #2 specific entries are impacted
 
 #CONVERT VOLUME DOSAGES FOR LIQUID MEDS. OMIT WATER TO AVOID PICKING UP SOLID DOSE MEDS INSTRUCTED TO BE DISSOLVED IN WATER.
 meddata$CodeValue<-ifelse(grepl("ml",meddata$DESCRIPTION)&!grepl("water",meddata$DESCRIPTION),as.numeric(meddata$CodeValue)/5,as.numeric(meddata$CodeValue))
+
+meddata<-unique(meddata)
+meddata$DAILY_DOSE<-signif(meddata$DAILY_DOSE,digits=2)
+meddata$FAMILY<-ifelse(meddata$TYPE=="Doxycycline",paste("Antimicrobial"),paste(meddata$FAMILY))
+meddata$FAMILY<-ifelse(meddata$TYPE=="Chloretracycline",paste("Chlortetracycline"),paste(meddata$FAMILY))
+meddata$EntryDate<-as.Date(meddata$EntryDate,format="%d/%m/%Y")
+meddata$END_DATE<-as.Date(meddata$END_DATE,format="%d/%m/%Y")
+
+#Correct any analagous types
+meddata$TYPE<-ifelse(meddata$TYPE=="Hydrochlorothiazide",paste("Hydrochlorthiazide"),paste(meddata$TYPE))
+meddata$TYPE<-ifelse(meddata$TYPE=="Trandopril",paste("Trandolapril"),paste(meddata$TYPE))
+
 save(meddata,file="PERMITmeddata28.rda")
