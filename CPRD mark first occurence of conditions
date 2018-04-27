@@ -106,6 +106,28 @@ crea.rep$DaysSinceNephrectomy<-difftime(strptime(crea.rep$NephDate,format="%Y-%m
 crea.rep$DaysSinceNephrectomy<-as.numeric(crea.rep$DaysSinceNephrectomy, units="days")
 crea.rep$DaysSinceNephrectomy<-ifelse(crea.rep$DaysSinceNephrectomy<0,NA,crea.rep$DaysSinceNephrectomy)
 save(crea.rep, file = "crea.repongoing.rda")
+
+######################################################################################
+#TRANSPLANT
+Nep<-read.csv("transplant1.csv")
+head(CPRD2[CPRD2$medcode %in% Nep$Medcode,])# CHECK THERE ARE VALUES TO MATCH
+CPRD2$TransplantDate<-CPRD2$eventdate 
+CPRD2$TransplantDate<-ifelse(!CPRD2$medcode  %in%  Nep$Medcode,NA,paste(CPRD2$TransplantDate)) 
+
+smalltab<-CPRD2[!is.na(CPRD2$TransplantDate) & CPRD2$patid %in% crea.rep$PatientID,c("patid","TransplantDate")]
+first<-smalltab %>%
+    group_by(patid) %>%
+    arrange(TransplantDate) %>%
+    slice(1L) %>%
+as.data.frame
+head(first)
+names(first)[1]<-"PatientID"
+
+crea.rep<-merge(crea.rep,first,all.x=TRUE)
+crea.rep$DaysSinceTransplant<-difftime(strptime(crea.rep$TransplantDate,format="%Y-%m-%d"),strptime(crea.rep$event.date,format="%Y-%m-%d"),unit="days")
+crea.rep$DaysSinceTransplant<-as.numeric(crea.rep$DaysSinceTransplant, units="days")
+crea.rep$DaysSinceTransplant<-ifelse(crea.rep$DaysSinceTransplant<0,NA,crea.rep$DaysSinceTransplant)
+save(crea.rep, file = "crea.repongoing.rda")
 ######################################################################################
 #RRT
 Dialysis<-read.csv("Dialysis1.csv")
@@ -128,8 +150,8 @@ crea.rep<-merge(crea.rep,first,all.x=TRUE)
 crea.rep$DaysSinceRRT<-difftime(strptime(crea.rep$RRTDate,format="%Y-%m-%d"),strptime(crea.rep$event.date,format="%Y-%m-%d"),unit="days")
 crea.rep$DaysSinceRRT<-as.numeric(crea.rep$DaysSinceRRT, units="days")
 crea.rep$DaysSinceRRT<-ifelse(crea.rep$DaysSinceRRT<0,NA,crea.rep$DaysSinceRRT)
-save(crea.rep, file = "crea.repongoing.rda")
-
+crea.rep$RenalTransplant<-ifelse(crea.rep$RenalTransplant==1,1,0)
+crea.rep$RenalTransplant<-ifelse(is.na(crea.rep$RenalTransplant),0,1)
 save(crea.rep, file = "crea.repongoing.rda")
 ######################################################################################
 
