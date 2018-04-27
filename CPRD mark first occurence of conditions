@@ -258,4 +258,31 @@ crea.rep$EstPregnant<-ifelse(crea.rep$event.date-crea.rep$MatDate1<310,1,0)
 crea.rep$EstPregnant<-ifelse(crea.rep$event.date-crea.rep$MatDate2<310,1,crea.rep$EstPregnant)
 crea.rep$EstPregnant<-ifelse(crea.rep$event.date-crea.rep$MatDate3<310,1,crea.rep$EstPregnant)
 crea.rep$EstPregnant<-ifelse(crea.rep$event.date-crea.rep$MatDate4<310,1,crea.rep$EstPregnant)
-save(crea.rep, file = "crea.rep18.rda")
+save(crea.rep, file = "crea.rep.rda")
+
+################################################################################
+#CHRONIC LIVER DISEASE
+CLD1<-read.csv("Liver1.csv")
+CPRD2$tempDate<-CPRD2$eventdate 
+CPRD2$tempDate<-ifelse(!CPRD2$medcode  %in%  CLD1$Medcode,NA,CPRD2$tempDate) 
+CPRD3$tempDate<-CPRD3$eventdate 
+CPRD3$tempDate<-ifelse(!CPRD3$medcode  %in%  CLD1$Medcode,NA,CPRD3$tempDate) 
+
+smalltab<-rbind(CPRD2[,c(1,12)],CPRD3[,c(1,18)])
+smalltab<-smalltab[!is.na(smalltab$tempDate),]
+first<-smalltab %>%
+    group_by(patid) %>%
+    arrange(tempDate) %>%
+    slice(which.min(as.numeric(tempDate))) %>%
+as.data.frame
+    head(first)
+    
+names(first)<-c("PatientID","CLD1Date")
+crea.rep<-merge(crea.rep,as.data.frame(first),all.x=TRUE)
+
+crea.rep$CLDDate<-as.Date(crea.rep$CLDDate,origin="1970/01/01")
+crea.rep$DaysSinceCLD<-difftime(strptime(crea.rep$event.date,format="%Y-%m-%d"),strptime(crea.rep$CLDDate,format="%Y-%m-%d"),unit="days")
+crea.rep$DaysSinceCLD<-ifelse(crea.rep$DaysSinceCLD<0,NA,crea.rep$DaysSinceCLD)
+crea.rep$CLD<-ifelse(is.na(crea.rep$DaysSinceCLD),0,1)
+summary(crea.rep$DaysSinceCLD,na.rm=TRUE)
+
