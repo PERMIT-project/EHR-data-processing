@@ -19,10 +19,10 @@ length(crea.rep$PatientID) #5271263
 
 #Add a random practise ID for splitting the data
 
-Source<-unique(crea.rep$pracid)
-s1<-as.data.frame(Source)
+pracid<-unique(crea.rep$pracid)
+s1<-as.data.frame(pracid)
 set.seed(111)
-randompracID<-sample(1:length(Source),length(Source))
+randompracID<-sample(1:length(pracid),length(pracid))
 s2<-as.data.frame(randompracID)
 s3<-cbind(s1,s2)
 crea.rep<-merge(crea.rep,s3,all.x=TRUE)
