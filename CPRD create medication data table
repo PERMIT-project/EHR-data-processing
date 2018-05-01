@@ -5,9 +5,22 @@ doses<-read.table("common_dosages.txt",header=TRUE,sep="\t") #THIS IS THE CPRD P
 #names=textid	text	daily_dose	dose_number	dose_unit	dose_frequency	dose_interval	choice_of_dose	dose_max_average	change_dose	dose_duration
 
 product<-read.csv("productedited803.csv")#THIS IS THE MEDICATION LOOKUP
-#names=Prodcode	Gemscript	?	Description	TYPE	Dose_per_tab	Formulation	BNFCode	FAMILY	BNFchapter		
+#names="CODE1"  "CODE2"        "CODE3"        "DESC"         "TYPE"
+# "DOSE_PER_TAB" "FORMAT"       "FAMILY"
+	
 
 therapy<-read_dta("hf_cases_therapy.dta") #THIS IS THE PATIENT MEDICATION HISTORY
+#names="patid"     "eventdate" "sysdate"   "consid"    "prodcode"  "staffid"
+#"textid"    "bnfcode"   "qty"       "ndd"       "numdays"   "numpacks"
+#"packtype"  "issueseq"
 
-therapy<-therapy[therapy$medcode %in% product$CODE1,c(1,4:8)]
-names(therapy)<-c("","","","","","")
+therapy<-therapy[therapy$prodcode %in% product$CODE1,]
+product<-product[,c(1,4:8)]
+names(product)<-c("prodcode","DESC","TYPE","DOSE_PER_TAB","FORMAT","FAMILY")
+therapy<-merge(therapy,product,all.x=TRUE)
+drugsCPRD<-merge(therapy,doses,all.x=TRUE)
+save(drugsCPRD,file="drugsCPRD.rda")
+load("crea.rep.rda")
+
+drugsCPRD<-drugsCPRD[drugsCPRD$patid %in% crea.rep$PatientID,]
+save(drugsCPRD,file="drugsCPRD.rda")
