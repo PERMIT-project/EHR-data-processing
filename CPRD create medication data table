@@ -1,0 +1,13 @@
+setwd("/mnt/bmh01-rds/Peek_PERMIT/")
+library(haven) #Reads dta format
+
+doses<-read.table("common_dosages.txt",header=TRUE,sep="\t") #THIS IS THE CPRD PREDICTED DOSE INFORMATION FILE
+#names=textid	text	daily_dose	dose_number	dose_unit	dose_frequency	dose_interval	choice_of_dose	dose_max_average	change_dose	dose_duration
+
+product<-read.csv("productedited803.csv")#THIS IS THE MEDICATION LOOKUP
+#names=Prodcode	Gemscript	?	Description	TYPE	Dose_per_tab	Formulation	BNFCode	FAMILY	BNFchapter		
+
+therapy<-read_dta("hf_cases_therapy.dta") #THIS IS THE PATIENT MEDICATION HISTORY
+
+therapy<-therapy[therapy$medcode %in% product$CODE1,c(1,4:8)]
+names(therapy)<-c("","","","","","")
