@@ -8,7 +8,6 @@ product<-read.csv("productedited803.csv")#THIS IS THE MEDICATION LOOKUP
 #names="CODE1"  "CODE2"        "CODE3"        "DESC"         "TYPE"
 # "DOSE_PER_TAB" "FORMAT"       "FAMILY"
 	
-
 therapy<-read_dta("hf_cases_therapy.dta") #THIS IS THE PATIENT MEDICATION HISTORY
 #names="patid"     "eventdate" "sysdate"   "consid"    "prodcode"  "staffid"
 #"textid"    "bnfcode"   "qty"       "ndd"       "numdays"   "numpacks"
