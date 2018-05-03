@@ -1,3 +1,4 @@
+#Creates a table of relevant prescriptions per person by date.
 setwd("/mnt/bmh01-rds/Peek_PERMIT/")
 library(haven) #Reads dta format
 
