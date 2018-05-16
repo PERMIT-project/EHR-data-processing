@@ -1,13 +1,12 @@
 memory.size(100000) #Assign sufficient memory to R
 load("sir.data.rda") #Load lng format input file
 
-library(zoo)
+library("zoo")
 #library(plyr)
-library(tidyverse)
-library(zoo)
-library(data.table)
-library(survival)
-library(lubridate)
+library("tidyverse")
+library("data.table")
+library("survival")
+library("lubridate")
 
 #READ CONDITION FILES- suffix names with a common suffix to import together
 temp = list.files(pattern="*1.csv")
@@ -55,15 +54,11 @@ crea <- sir.data[sir.data$ReadCode=="44J3.",] #Based on Read Codes v2- adapt as 
 crea <- droplevels(crea)
 
 #CHECK FOR CASES VIABLE VALUE IS ENTERED IN THE 'UNITS' COLUMN BY MISTAKE
-temp<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<1000  & is.na(crea$CodeValue),crea$CodeUnits,NA)
-table(temp, useNA = "ifany") 
+temp<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<3000  & is.na(crea$CodeValue),crea$CodeUnits,NA)
+table(temp, useNA = "ifany") # no row is affected, no need to do anything
 
-# crea$CodeValue<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & 
-#                          as.numeric(as.character(crea$CodeUnits))<1000 & 
-#                          is.na(crea$CodeValue),crea$CodeUnits,crea$CodeValue)
-#crea$CodeUnits<-ifelse(!is.na(temp),paste(""),paste(crea$CodeUnits))
 crea$CodeUnits <- as.character(crea$CodeUnits)
-crea$CodeUnits<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<1000 & is.na(crea$CodeValue),"",crea$CodeUnits)
+crea$CodeUnits<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<3000 & is.na(crea$CodeValue),"",crea$CodeUnits)
 
 crea$CodeValue<-as.numeric(as.character(crea$CodeValue))
 
@@ -92,8 +87,15 @@ crea<-crea[!is.na(crea$CodeUnits),]
 crea$CodeValue<-ifelse(crea$CodeUnits=="mmol/L" & as.numeric(crea$CodeValue)<50,(as.numeric(crea$CodeValue)*1000),as.numeric(crea$CodeValue))
 crea$CodeUnits<-"umol/L"
 
-crea<-crea[as.numeric(crea$CodeValue)>=20 & !is.na(crea$CodeValue),] 
-#Appy upper limit here if required
+summary(crea)
+
+# remove values outside agreed range
+crea<-crea %>% 
+        filter(CodeValue >= 20) %>% 
+          filter(CodeValue <= 3000)
+
+summary(crea)
+
 save(crea,file="crearecleaned.rda")
 
 ###############################################################################
@@ -105,7 +107,7 @@ save(crea,file="crearecleaned.rda")
 #REMOVE SAME DAY CREATININE ENTRIES IF THE SOURCE LOCATION CODE DIFFERS.
 #(OCCURS IN SIR DURING TRANSFER BETWEEN PRIMARY AND SECONDARY CARE EHF SYSTEMS)
 
-crea <- crea[!duplicated(crea[,c(1,4,6,7)]), ]
+crea <- crea[!duplicated(crea[,c("PatientID","EntryDate","CodeValue","Source")]), ]
 
 #crea<-crea[order(crea$PatientID,crea$CodeValue, rev(crea$Source)),]
 # crea2<-crea[(duplicated(crea[,c(1,4,6)])&!duplicated(crea[,7])),] #Find duplicates of value and patient ID with different sources
@@ -153,12 +155,17 @@ crea <- crea %>%
     distinct(PatientID, event.date, CodeValue,.keep_all = TRUE)  %>% # remove remaining duplicates  
       select(-PatientID.next, -event.date.next, -CodeValue.next, -Source.next, -duplicated, -diff)
 
+summary(crea)
+
 #SELECT MEAN DAILY CREATININE IF MULTIPLE ENTRIES AFTER REMOVING DELAYED DUPLICATES AND OUT OF RANGE VALUES
 smalltab<-crea[,c("PatientID","CodeValue", "EntryDate")]
-xcrea<-smalltab %>% group_by(PatientID, EntryDate) %>%
-  summarize(Creatinine = mean(as.numeric(as.character(CodeValue)))) %>%
-    ungroup(xcrea)
+xcrea<-smalltab %>% 
+  group_by(PatientID, EntryDate) %>%
+    summarize(Creatinine = mean(as.numeric(as.character(CodeValue)))) %>%
+      ungroup()
 crea<-merge(crea,as.data.frame(xcrea),all.x=TRUE)
+
+summary(crea)
 
 ######################################################
 #Add demographic variables from lookup tables
@@ -212,12 +219,12 @@ sir.data$event.date <- as.Date(as.character(sir.data$EntryDate),format="%Y%m%d")
 # crea.rep <- crea.rep[-which(crea.rep$PatientID %in% range_short_ids),]
 
 range <- sir.data %>%
-  filter(event.date >= as.Date("2008-01-01")) %>% # is this to be done with only data after 2008?
+  #filter(event.date >= as.Date("2008-01-01")) %>% # is this to be done with only data after 2008?
   group_by(PatientID) %>%
   summarise(min.event.date = min(event.date),
             max.event.date = max(event.date)) %>% # get earliest and latest date
   ungroup() %>%
-  mutate(diff = (max.event.date - min.event.date)/(365*2))  %>% # calculate range in years
+  mutate(diff = as.numeric((max.event.date - min.event.date)/(365)))  %>% # calculate range in years
   filter(diff >= 2)
 
 crea.rep <- crea.rep %>% # remove patients with at least two years follow up
@@ -259,5 +266,5 @@ crea.rep<-merge(crea.rep,s3,all.x=TRUE)
 crea.rep$randompracID<-ifelse(crea.rep$Source=="salfordt",0,crea.rep$randompracID)
 
 save(crea.rep,file="crea.rep2yrsall.rda")
-
+save(sir.data,file="sir.data2yrsall.rda")
 
