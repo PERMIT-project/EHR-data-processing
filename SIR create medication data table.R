@@ -1,13 +1,16 @@
-load("sir.data.Rdata") #Full EHR extract
-load("crea.rep.rda") #Primary table with 1 row per patient per date summarising the maximum creatinine value per day
+library("stringr")
+library("lubridate")
+library("plyr")
+library("dplyr")
+library("tidyr")
+library("splitstackshape")
+
+#memory.size(1500000)
+
+load("sir.data2yrsall.rda") #Full EHR extract
+load("crea.repongoing.rda") #Primary table with 1 row per patient per date summarising the mean creatinine value per day, with pathology results
 inst<-read.csv("inst051217.csv") #Lookup regex file of unique textual precription instructions paired with implications for dose, number etc
 codes1<-read.csv("SIRdrugs.csv") #Lookup of medication type, family, active ingredient etc
-
-library(stringr)
-library(lubridate)
-library(plyr)
-library(dplyr)
-library(tidyr)
 
 #Subset extract if required to enable faster processing
 sir.data<-sir.data[sir.data$EntryDate>=20070101&sir.data$EntryDate<=20170901,] 
@@ -22,7 +25,7 @@ inst$DESCRIPTION<-tolower(inst$DESCRIPTION) #LOWER CASE
 sir.data$CodeUnits<-tolower(sir.data$CodeUnits)
 
 #REMOVE ANY DUPLICATE PRECRIPTION ENTRIES
-sub<-sir.data[,c("PatientID","ReadCode","CodeValue","CodeUnits","EntryDate"),]
+sub <- sir.data[,c("PatientID","ReadCode","CodeValue","CodeUnits","EntryDate"),]
 sub <- unique(sub)
 colnames(sub)[colnames(sub) == 'CodeUnits'] <- 'DESCRIPTION' #ENSURE FIELD NAMES MATCH BETWEEN TABLES
 crea.rep <- unique(crea.rep)
@@ -46,7 +49,6 @@ sub$DESCRIPTION<-gsub("#", "", sub$DESCRIPTION)
 sub$DESCRIPTION<-gsub(",", "", sub$DESCRIPTION) 
 sub$DESCRIPTION<-gsub(":", "", sub$DESCRIPTION) 
 sub$DESCRIPTION<-gsub("[.]", "", sub$DESCRIPTION) 
-library(stringr)
 sub$DESCRIPTION<-str_replace(sub$DESCRIPTION, "(ip.*)", "")
 sub$DESCRIPTION<-gsub("[(]", "", sub$DESCRIPTION) 
 sub$DESCRIPTION<-gsub("[)]", "", sub$DESCRIPTION) 
@@ -99,15 +101,22 @@ subs$DAILY_DOSE<-ifelse(is.na(subs$DAILY_DOSE),subs$MEDIAN_DOSE,subs$DAILY_DOSE)
 #THIS CODE OVERWRITES SO BE CAREFUL TO GO BACK TO THE INITIAL CONSTRUCTION OF SUBS IF YOU WANT TO RUN IT AGAIN TO AVOID REPETITIVELY CREATING NEW ROWS.
 #THEN should contain the number of dose changes (i.e. the number of extra rows you need, so most rows should equal zero.)
 
-#DEFINE THOSE PRESCRIPTINS WITH PROGRESSIVE DOSING
-library(splitstackshape)
+#######DEFINE THOSE PRESCRIPTINS WITH PROGRESSIVE DOSING
+# subs$THEN<-ifelse(is.na(subs$THEN),0,subs$THEN)
+# subs$THEN<-as.numeric(subs$THEN)
+# expandRows(subs, "THEN") #Create a copied row for each changing dosage
+# subt<-subs[subs$THEN>0,]
+# head(subt)
+# subnt<-subs[subs$THEN<1,]
 subs$THEN<-ifelse(is.na(subs$THEN),0,subs$THEN)
 subs$THEN<-as.numeric(subs$THEN)
-expandRows(subs, "THEN") #Create a copied row for each changing dosage
+subs$THEN <- subs$THEN +1 # to avoid the non-replication of zeros
+subs <- expandRows(subs, "THEN", drop = FALSE) #Create a copied row for each changing dosage
+subs$THEN <- subs$THEN - 1 # not sure if there is reference to the 0/1 values later but in this way we can bring it back to it
 subt<-subs[subs$THEN>0,]
-head(subt)
-subnt<-subs[subs$THEN<1,]
-
+str(subt)
+subnt<-subs[subs$THEN < 1,]
+str(subnt)
 ############################################################################
 
 #EDIT THE DOSES FOR THE REPLICATE ROWS (FOLLOWING DOSE CHANGE)
