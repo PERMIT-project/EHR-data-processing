@@ -26,7 +26,7 @@ length(unique(as.factor(hf$PatientID))) #7254 total heart failure patients ident
 
 hf$Age<-(as.numeric(year(strptime(hf$EntryDate, format="%Y%m%d"))))-hf$BirthYear
 hf$hfage<-hf$Age
-smalltab<-hf[,c("PatientID","hfage")]
+smalltab<-hf[,c("PatientID","hfage","EntryDate")]
 #smalltab$PatientID<-as.factor(smalltab$PatientID)
 smalltab<-smalltab[!is.na(smalltab$hfage),]
 
@@ -34,7 +34,9 @@ first<-
   smalltab %>% 
     group_by(PatientID) %>%
       slice(which.min(hfage)) %>% 
-        ungroup(first)
+        ungroup(first) %>%
+          rename(hfdate = EntryDate) %>%
+            mutate(hfdate = as.Date(as.character(hfdate),format="%Y%m%d"))
 
 head(first)
 
@@ -198,6 +200,11 @@ ids <- crea.tmp %>%
 crea.rep <- crea[!(crea$PatientID %in% ids),]
 
 sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
+
+
+# add hfdate and age to crea.rep
+crea.rep <- crea.rep %>%
+  left_join(first, by = "PatientID")
 
 #Breakpoint
 #######################################################
