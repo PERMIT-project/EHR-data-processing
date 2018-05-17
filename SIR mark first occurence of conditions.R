@@ -4,8 +4,26 @@
 #THE FOLLOWING VARIABLES ARE CREATED BASED ON LOOKUP TABLES OF CLINICAL CODES USED TO QUERY AN EHR EXTRACT TABLE.
 #THREE COLUMNS ARE CREATED FOR EACH METRIC- TIME SINCE EVENT (DaysSince*), EVENT DATE (*Date), AND A BINARY MARKER (Condition_name) SHOWING EVER OCCURENCE
 
-load("sirdatahfonly.rda") #Load the full table
-load("crea.rep.rda")
+library("zoo")
+library("plyr")#If also loading dplyr ensure plyr is loaded first
+library("dplyr")
+library("tidyverse")
+library("zoo")
+library("data.table")
+library("survival")
+library("lubridate")
+
+load("sir.data2yrsall.rda") #Load the full table
+load("crea.repongoing.rda") 
+
+crea.rep <- crea.rep %>%
+  arrange(PatientID, event.date)
+
+#######################################################
+#Suffix files with a shared symbol to load them simultaneously:
+allfiles = list.files(pattern="*1.csv")
+for (i in 1:length(allfiles)) assign(allfiles[i], read.csv(allfiles[i]))
+#######################################################
 
 #NEPHRECTOMY
 sir.data$NephDate<-sir.data$EntryDate 
@@ -28,7 +46,7 @@ crea.rep$DaysSinceNephrectomy<-as.numeric(crea.rep$DaysSinceNephrectomy, units="
 crea.rep$DaysSinceNephrectomy<-ifelse(crea.rep$DaysSinceNephrectomy<0,NA,crea.rep$DaysSinceNephrectomy)
 crea.rep$Nephrectomy<-ifelse(is.na(crea.rep$DaysSinceNephrectomy),0,1)
 
-
+summary(crea.rep)
 
 #RRT
 sir.data$RRTDate<-sir.data$EntryDate 
@@ -47,6 +65,7 @@ crea.rep$DaysSinceRRT<-difftime(strptime(crea.rep$event.date,format="%Y-%m-%d"),
 crea.rep$DaysSinceRRT<-ifelse(crea.rep$DaysSinceRRT<0,NA,crea.rep$DaysSinceRRT)
 crea.rep$RRT<-ifelse(is.na(crea.rep$DaysSinceRRT),0,1)
 
+summary(crea.rep)
 
 #DIABETES
 sir.data$DiabDate<-sir.data$EntryDate 
@@ -65,6 +84,7 @@ crea.rep$DaysSinceDiabetic<-difftime(strptime(crea.rep$event.date,format="%Y-%m-
 crea.rep$DaysSinceDiabetic<-ifelse(crea.rep$DaysSinceDiabetic<0,NA,crea.rep$DaysSinceDiabetic)
 crea.rep$Diabetes<-ifelse(is.na(crea.rep$DaysSinceDiabetic),0,1)
 
+summary(crea.rep)
 
 #ATRIAL FIBRILLATION
 sir.data$AFDate<-sir.data$EntryDate 
@@ -85,6 +105,7 @@ crea.rep$DaysSinceAF<-ifelse(crea.rep$DaysSinceAF<0,NA,crea.rep$DaysSinceAF)
 crea.rep$AF<-ifelse(is.na(crea.rep$DaysSinceAF),0,1)
 summary(crea.rep$DaysSinceAF,na.rm=TRUE)
 
+summary(crea.rep)
 
 #IHD
 sir.data$IHDDate<-sir.data$EntryDate 
@@ -104,6 +125,7 @@ crea.rep$DaysSinceIHD<-ifelse(crea.rep$DaysSinceIHD<0,NA,crea.rep$DaysSinceIHD)
 crea.rep$IHD<-ifelse(is.na(crea.rep$DaysSinceIHD),0,1)
 summary(crea.rep$DaysSinceIHD,na.rm=TRUE)
 
+summary(crea.rep)
 
 #PERIPHERAL VASCULAR DISEASE
 sir.data$PVDDate<-sir.data$EntryDate 
@@ -123,6 +145,7 @@ crea.rep$DaysSincePVD<-ifelse(crea.rep$DaysSincePVD<0,NA,crea.rep$DaysSincePVD)
 crea.rep$PVD<-ifelse(is.na(crea.rep$DaysSincePVD),0,1)
 summary(crea.rep$DaysSincePVD,na.rm=TRUE)
 
+summary(crea.rep)
 
 #RENAL MALIGNANCY
 sir.data$RMALDate<-sir.data$EntryDate 
@@ -143,6 +166,7 @@ crea.rep$DaysSinceRenMal<-ifelse(crea.rep$DaysSinceRenMal<0,NA,crea.rep$DaysSinc
 crea.rep$RenalMalignancy<-ifelse(is.na(crea.rep$DaysSinceRenMal),0,1)
 summary(crea.rep$DaysSinceRenMal,na.rm=TRUE)
 
+summary(crea.rep)
 
 #RENAL TRANSPLANT
 sir.data$RTDate<-sir.data$EntryDate 
@@ -163,20 +187,69 @@ crea.rep$DaysSinceRT<-ifelse(crea.rep$DaysSinceRT<0,NA,crea.rep$DaysSinceRT)
 crea.rep$RenalTransplant<-ifelse(is.na(crea.rep$DaysSinceRT),0,1)
 summary(crea.rep$DaysSinceRT,na.rm=TRUE)
 
-#DEATH
-sir.data$Dead<-ifelse(sir.data$ReadCode  %in%  Death1.csv$ReadCode,1,0) 
-smalltab<-sir.data[sir.data$Dead==1,c("PatientID","Dead")]
+summary(crea.rep)
+
+##DEATH
+# old
+# sir.data$Dead<-ifelse(sir.data$ReadCode  %in%  Death1.csv$ReadCode,1,0) 
+# smalltab<-sir.data[sir.data$Dead==1,c("PatientID","Dead")]
+# first<-smalltab %>%
+#    group_by(PatientID) %>%  
+#       slice(which.max(as.numeric(Dead))) %>%
+# as.data.frame    
+# head(first)
+#   
+# crea.rep<-merge(crea.rep,as.data.frame(first),all.x=TRUE)
+# summary(crea.rep$Dead,na.rm=TRUE)
+# #No death dates were associated with the extracted data for this analysis
+# #save(crea.rep, file = "crea.repongoing.rda")
+## No death dates were associated with the extracted data for this analysis
+## save(crea.rep, file = "crea.repongoing.rda")
+
+sir.data$DeathDate <- sir.data$EntryDate 
+# remove codes with "Preferred place of death as they do not give definitve indication of death"
+Death_codes1.csv <- Death_codes1.csv %>%
+  filter(!grepl("^94Z", ReadCode5byte))
+
+sir.data$DeathDate<-ifelse((sir.data$ReadCode  %in%  Death_codes1.csv$ReadCode5byte) | (sir.data$ReadCode  %in%  Death_codes1.csv$ReadCode7byte),sir.data$DeathDate,NA)
+
+smalltab<-sir.data[!is.na(sir.data$DeathDate),c("PatientID","DeathDate","ReadCode", "Rubric")]
+
 first<-smalltab %>%
-   group_by(PatientID) %>%  
-      slice(which.max(as.numeric(Dead))) %>%
-as.data.frame    
+  group_by(PatientID) %>%  
+    arrange(DeathDate) %>% 
+      slice(which.max(as.numeric(DeathDate))) %>% # keep max because sometimes there are less specific codes that are recorded (e.g. discussed place of death) and patients live for some more months 
+        as.data.frame %>%
+          select(-Rubric, -ReadCode)
+
 head(first)
-  
+
 crea.rep<-merge(crea.rep,as.data.frame(first),all.x=TRUE)
-summary(crea.rep$Dead,na.rm=TRUE)
-#No death dates were associated with the extracted data for this analysis
-#save(crea.rep, file = "crea.repongoing.rda")
- 
+
+crea.rep$event.date<-as.Date(as.character(crea.rep$EntryDate),format="%Y%m%d")
+crea.rep$DeathDate<-as.Date(as.character(crea.rep$DeathDate),format="%Y%m%d")
+crea.rep$DaysSinceDeath<- as.numeric(crea.rep$event.date - crea.rep$DeathDate)
+crea.rep <- crea.rep %>%
+  arrange(PatientID, event.date)
+
+# to investigate patients with creatinine after death
+faulty_IDs <- unique(crea.rep %>% filter(DaysSinceDeath > 0 & !is.na(DaysSinceDeath)) %>% select(PatientID))
+smalltab <- smalltab %>% filter(PatientID %in% faulty_IDs$PatientID)
+summary(smalltab)
+
+
+crea.rep$DaysSinceDeath<-ifelse(crea.rep$DaysSinceDeath<0,NA,crea.rep$DaysSinceDeath)
+
+#crea.rep$Death<-ifelse(is.na(crea.rep$DaysSinceDeath),0,1)
+
+
+crea.rep %>% 
+  filter(event.date > DeathDate) %>%
+    distinct(PatientID) %>%
+      nrow() # what to do with these? exclude completely? exclude within a certain timeframe?
+
+summary(crea.rep,na.rm=TRUE)
+
 
 #CLD
 sir.data$CLDDate<-sir.data$EntryDate 
@@ -262,4 +335,4 @@ crea.rep$SerumSodium_DF<-ifelse(crea.rep$SerSodDateFlag==1,NA,crea.rep$SerumSodi
 crea.rep$BUN_DF<-ifelse(crea.rep$BUNDateFlag==1,NA,crea.rep$BUN)
 crea.rep$UricAcid_DF<-ifelse(crea.rep$UricAcidDateFlag==1,NA,crea.rep$UricAcid)
 
-save(crea.rep, file = "crea.repongoing.rda")
+save(crea.rep, file = "crea.repongoing_afterconditions.rda")
