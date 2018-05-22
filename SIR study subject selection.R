@@ -202,9 +202,9 @@ crea.rep <- crea[!(crea$PatientID %in% ids),]
 sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
 
 
-# add hfdate and age to crea.rep
-crea.rep <- crea.rep %>%
-  left_join(first, by = "PatientID")
+# # add hfdate and age to crea.rep
+# crea.rep <- crea.rep %>%
+#   left_join(first, by = "PatientID")
 
 #Breakpoint
 #######################################################
