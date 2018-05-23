@@ -1,7 +1,7 @@
-memory.size(70000) #Assign sufficient memory to R to accomplish tasks required
+#memory.size(70000) #Assign sufficient memory to R to accomplish tasks required
 
 library("zoo")
-library("plyr")#If also loading dplyr ensure plyr is loaded first
+#library("plyr")#If also loading dplyr ensure plyr is loaded first
 library("dplyr")
 library("tidyverse")
 library("zoo")
@@ -11,14 +11,14 @@ library("lubridate")
 
 #######################################################
 
-load("crea.rep2yrsall.rda") #primary table
+load("SIR_crea.rep2yrsall.rda") #primary table
 load("sir.data2yrsall.rda") #full table containing all patient data
 
-sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
-sir.data$CodeValue<-as.numeric(as.character(sir.data$CodeValue))
-sir.data<-sir.data[!is.na(sir.data$CodeValue),]
+sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,] # keep only patients that respect incl criteria
+sir.data$CodeValue<-as.numeric(as.character(sir.data$CodeValue)) # convert CodeValue to numeric
+sir.data<-sir.data[!is.na(sir.data$CodeValue),] # remove NAs
 sir.data <- sir.data %>% 
-  filter(!(event.date<as.Date("1900-01-01") | event.date>as.Date("2017-08-01")))
+  filter(!(event.date<as.Date("1900-01-01") | event.date>as.Date("2017-08-01"))) # remove records with impossible dates
 
 summary(sir.data$event.date)
 
@@ -34,13 +34,19 @@ for (i in 1:length(allfiles)) assign(allfiles[i], read.csv(allfiles[i]))
 
 #NEAREST PRIOR MEAN DAILY SERUM SODIUM #DATE FLAG 30 DAYS
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% SerumSodium1.csv$ReadCode])
-sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumSodium1.csv$ReadCode & !sir.data$CodeUnits=="%" & sir.data$CodeValue>=20 & sir.data$CodeValue<=3000, paste(sir.data$CodeValue),NA)
+#[1] mmol/L mmol/l        None   132    %      127    134    138    mmol   1      136
+sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumSodium1.csv$ReadCode &
+                        !sir.data$CodeUnits=="%" & sir.data$CodeValue>=20 & 
+                          sir.data$CodeValue<=3000, 
+                      paste(sir.data$CodeValue), #why using paste?
+                      NA)
+
 smalltab<-sir.data[!is.na(sir.data$temp),c("PatientID","CodeValue","event.date")]
-columns=names(smalltab[c(1,3)])
+columns <- names(smalltab[c(1,3)])
 dots<-lapply(columns, as.symbol)
 first <-smalltab %>% 
   group_by_(.dots=dots) %>%
-  summarise(SerumSodium=mean(CodeValue)) %>%
+  summarise(SerumSodium=mean(CodeValue)) %>% 
   as.data.frame
 
 indx1 <-neardate(crea.rep$PatientID, first$PatientID, crea.rep$event.date, first$event.date, 
@@ -52,16 +58,35 @@ crea.rep$SerumSodium<-unlist(crea.rep$SerumSodium)
 summary(crea.rep)
 
 #CLOSEST DAILY BMI MEAN #1YR DATE FLAG
-sir.data$temp<-as.numeric(ifelse(sir.data$ReadCode %in% BMI1.csv$ReadCode & sir.data$CodeValue>=10 & sir.data$CodeValue<=70, as.numeric(paste(sir.data$CodeValue)),NA))
-sir.data$height<-as.numeric(ifelse(sir.data$ReadCode %in% Height1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA))
+sir.data$temp<-as.numeric(ifelse(sir.data$ReadCode %in% BMI1.csv$ReadCode & 
+                                   sir.data$CodeValue>=10 & 
+                                    sir.data$CodeValue<=70,
+                                 as.numeric(paste(sir.data$CodeValue)),
+                                 NA))
+
+sir.data$height<-as.numeric(ifelse(sir.data$ReadCode %in% Height1.csv$ReadCode,
+                                   as.numeric(paste(sir.data$CodeValue)),
+                                   NA))
+
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% Height1.csv$ReadCode])
-sir.data$height<-ifelse(!is.na(sir.data$height)&sir.data$CodeUnits=="cm",sir.data$height/100,sir.data$height)
+#[1] cm    m 
+
+sir.data$height<-ifelse(!is.na(sir.data$height)&sir.data$CodeUnits=="cm",
+                        sir.data$height/100,
+                        sir.data$height)
+
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% Weight1.csv$ReadCode])
-sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Weight1.csv$ReadCode & sir.data$CodeUnits=="kg/m2",sir.data$CodeValue,sir.data$temp)
+# [1] Kg          kg    kg/m2 None 
+
+sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Weight1.csv$ReadCode & sir.data$CodeUnits=="kg/m2",
+                      sir.data$CodeValue,
+                      sir.data$temp)
 #Apply max height across dataset
 
 htab<-sir.data[!is.na(sir.data$height),c("PatientID","CodeValue","event.date")]
+
 columns1=names(htab[c(1,3)])
+
 dots<-lapply(columns1, as.symbol)
 firstH <-htab %>% 
   group_by_(.dots=dots) %>%
@@ -69,7 +94,11 @@ firstH <-htab %>%
   as.data.frame
 sir.data<-merge(sir.data,firstH,all.x=TRUE)
 
-sir.data$weight<-as.numeric(ifelse(sir.data$ReadCode %in% Weight1.csv$ReadCode & !sir.data$CodeUnits=="kg/m2",as.numeric(paste(sir.data$CodeValue)),NA))
+sir.data$weight<-as.numeric(ifelse(sir.data$ReadCode %in% Weight1.csv$ReadCode & !sir.data$CodeUnits=="kg/m2",
+                                   as.numeric(paste(sir.data$CodeValue)),
+                                   NA))
+
+
 sir.data$temp<-ifelse(is.na(sir.data$temp),(as.numeric(sir.data$weight)/(as.numeric(sir.data$height))^2),sir.data$temp)
 
 BMItab<-sir.data[sir.data$temp>=10 & sir.data$temp<=70,c("PatientID","temp","event.date")]
@@ -89,7 +118,10 @@ crea.rep$BMI<-unlist(crea.rep$BMI)
 summary(crea.rep)
 
 #MEAN DAILY SERUM URIC ACID #1 YEAR DATE FLAG
-sir.data$temp<-ifelse(sir.data$ReadCode %in% UricAcid1.csv$ReadCode, as.numeric(paste(sir.data$CodeValue)),NA)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% UricAcid1.csv$ReadCode, 
+                      as.numeric(paste(sir.data$CodeValue)),
+                      NA)
+
 UA<-sir.data[!is.na(sir.data$temp) & !is.na(sir.data$PatientID),]
 unique(UA$CodeUnits)
 sir.data$temp<-ifelse((sir.data$CodeUnits=="umol/L"|sir.data$CodeUnits=="umol/l") & sir.data$ReadCode %in% UricAcid1.csv$ReadCode,sir.data$temp/1000,sir.data$temp)
@@ -114,8 +146,13 @@ summary(crea.rep)
 
 #MEAN DAILY BLOOD UREA NITROGEN #30 DAY DATE FLAG
 table(droplevels(sir.data$CodeUnits[sir.data$ReadCode %in% BUN1.csv$ReadCode]))
-sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA)
-sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>=1,as.numeric(sir.data$CodeUnits),sir.data$temp)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode,
+                      as.numeric(paste(sir.data$CodeValue)),
+                      NA)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>=1,
+                      as.numeric(sir.data$CodeUnits),
+                      sir.data$temp)
+
 smalltab<-sir.data[!is.na(sir.data$temp)&sir.data$CodeValue>=1&as.numeric(sir.data$CodeValue)<=50,c("PatientID","CodeValue","event.date")]
 summary(smalltab$CodeValue)
 
@@ -138,12 +175,19 @@ crea.rep$BUN_DF<-ifelse(crea.rep$BUNDateFlag==0,crea.rep$BUN,NA)
 summary(crea.rep)
 
 #MEAN DAILY SERUM POTASSIUM #1 MONTH DATE FLAG
-sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode,
+                      as.numeric(paste(sir.data$CodeValue)),
+                      NA)
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode])
-sir.data$temp<-ifelse(is.na(sir.data$ReadCode)&sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>0,as.numeric(sir.data$CodeUnits),sir.data$temp)
-sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode & (sir.data$CodeUnits=="mL/min"),NA,sir.data$temp)
+# sir.data$temp<-ifelse((is.na(sir.data$temp)|sir.data$temp == 0)&sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode & as.numeric(as.character(sir.data$CodeUnits))>0,
+#                       as.numeric(sir.data$CodeUnits),
+#                       sir.data$temp)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode & (sir.data$CodeUnits=="mL/min"),
+                      NA,
+                      sir.data$temp)
 
 smalltab<-sir.data[!is.na(sir.data$temp)&sir.data$temp>=2&sir.data$temp<=10,c("PatientID","CodeValue","event.date")]
+
 columns=names(smalltab[c(1,3)])
 dots<-lapply(columns, as.symbol)
 first <-smalltab %>% 
@@ -160,9 +204,14 @@ crea.rep$SerPotassium<-unlist(crea.rep$SerPotassium)
 summary(crea.rep)
 
 #MEAN DAILY HEART RATE #30 DAYS
-sir.data$temp<-ifelse(sir.data$ReadCode %in% HeartRate1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% HeartRate1.csv$ReadCode,
+                      as.numeric(paste(sir.data$CodeValue)),
+                      NA)
+
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% HeartRate1.csv$ReadCode])
+
 smalltab<-sir.data[!is.na(sir.data$temp)&sir.data$temp>=20&sir.data$temp<=200,c("PatientID","CodeValue","event.date")]
+
 columns=names(smalltab[c(1,3)])
 dots<-lapply(columns, as.symbol)
 first <-smalltab %>% 
@@ -326,8 +375,9 @@ summary(crea.rep)
 
 #MAX DAILY MEAN CORPUSCULAR VOLUME #120 DAY DATE FLAG
 sir.data$temp<-ifelse(sir.data$ReadCode %in% MCV1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA)
-sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% MCV1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>0,as.numeric(sir.data$CodeUnits),sir.data$temp)
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% MCV1.csv$ReadCode])
+sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% MCV1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>0,as.numeric(sir.data$CodeUnits),sir.data$temp)
+
 #1femtoliter=1 cubic micron
 smalltab<-sir.data[!is.na(sir.data$temp)&sir.data$temp>=50&sir.data$temp<=150,c("PatientID","CodeValue","event.date")]
 columns=names(smalltab[c(1,3)])
@@ -346,12 +396,24 @@ crea.rep$MCV<-unlist(crea.rep$MCV)
 summary(crea.rep)
 
 #MAX DAILY HAEMOGLOBIN #120 DAY DATE FLAG
-sir.data$temp<-ifelse(sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA)
+sir.data$temp<-ifelse(sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode,
+                      as.numeric(paste(sir.data$CodeValue)),
+                      NA)
+
 unique(sir.data$CodeUnits[sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode])
-sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>0,as.numeric(sir.data$CodeUnits),sir.data$temp)
-sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode&sir.data$CodeUnits=="g/dl"|sir.data$CodeUnits=="g/dL",sir.data$temp*10,sir.data$temp)
-sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode&sir.data$CodeUnits=="g/dl"|sir.data$CodeUnits=="g/dL",sir.data$temp*10,sir.data$temp)
-sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode&sir.data$CodeUnits=="mmol/mol"|sir.data$CodeUnits=="None",NA,sir.data$temp)
+
+sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode & as.numeric(sir.data$CodeUnits)>0,
+                      as.numeric(sir.data$CodeUnits),
+                      sir.data$temp)
+
+sir.data$temp<-ifelse(!is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode &(sir.data$CodeUnits=="g/dl"|sir.data$CodeUnits=="g/dL")& sir.data$temp < 25,
+                      sir.data$temp*10,
+                      sir.data$temp)
+
+
+sir.data$temp<-ifelse(is.na(sir.data$temp)&sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode&(sir.data$CodeUnits=="mmol/mol"|sir.data$CodeUnits=="None"),
+                      NA,
+                      sir.data$temp)
 
 smalltab<-sir.data[!is.na(sir.data$temp)&sir.data$temp>=30&sir.data$temp<=260,c("PatientID","CodeValue","event.date")]
 columns=names(smalltab[c(1,3)])
@@ -369,4 +431,4 @@ crea.rep$Haemoglobin<-unlist(crea.rep$Haemoglobin)
 #save(crea.rep, file = "crea.repongoing.rda")
 summary(crea.rep)
 
-save(crea.rep, file = "crea.repongoing.rda")
+save(crea.rep, file = "SIR_crea.repongoing.rda")
