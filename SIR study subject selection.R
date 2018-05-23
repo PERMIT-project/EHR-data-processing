@@ -1,12 +1,13 @@
-memory.size(100000) #Assign sufficient memory to R
-load("sir.data.rda") #Load lng format input file
-
 library("zoo")
 #library(plyr)
+library("dplyr")
 library("tidyverse")
 library("data.table")
 library("survival")
 library("lubridate")
+
+load("sir.data.rda") #Load lng format input file
+
 
 #READ CONDITION FILES- suffix names with a common suffix to import together
 temp = list.files(pattern="*1.csv")
@@ -55,19 +56,40 @@ save(sir.data,file="sirdatahfonly.rda")
 crea <- sir.data[sir.data$ReadCode=="44J3.",] #Based on Read Codes v2- adapt as required
 crea <- droplevels(crea)
 
-#CHECK FOR CASES VIABLE VALUE IS ENTERED IN THE 'UNITS' COLUMN BY MISTAKE
-temp<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<3000  & is.na(crea$CodeValue),crea$CodeUnits,NA)
-table(temp, useNA = "ifany") # no row is affected, no need to do anything
-
-crea$CodeUnits <- as.character(crea$CodeUnits)
-crea$CodeUnits<-ifelse(as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<3000 & is.na(crea$CodeValue),"",crea$CodeUnits)
-
 crea$CodeValue<-as.numeric(as.character(crea$CodeValue))
+crea$CodeUnits <- as.character(crea$CodeUnits)
+
+#CHECK FOR CASES VIABLE VALUE IS ENTERED IN THE 'UNITS' COLUMN BY MISTAKE
+temp<-as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<3000  & is.na(crea$CodeValue)
+table(temp, useNA = "ifany") # no row is affected, no need to do anything
+# temp
+# FALSE   <NA> 
+#   442671   1385 
+
+temp<-as.numeric(as.character(crea$CodeUnits))>0 & as.numeric(as.character(crea$CodeUnits))<3000  & !is.na(crea$CodeValue)
+table(temp, useNA = "ifany") 
+# temp
+# FALSE   TRUE   <NA> 
+#   1385     50 442621 
+#There are 50 rows affected let's explore the distribution of the values in codevalue
+
+tmp <- crea[!is.na(temp) & temp == TRUE, ]
+summary(tmp)
+
+#these are all 0s with the CodeUnits containing the actual information, let's put them in.
+crea$CodeValue <- ifelse(!is.na(temp) & temp == TRUE, 
+                         as.numeric(as.character(crea$CodeUnits)), 
+                         crea$CodeValue)
+
+crea$CodeUnits <- ifelse(!is.na(temp) & temp == TRUE, 
+                         "", 
+                         crea$CodeUnits)
 
 summary(crea$CodeValue)
 
 crea<-crea[!is.na(crea$CodeValue),]
 length(unique(as.factor(crea$PatientID))) #number of hf patients over 18 at diagnosis with creatinine data
+#6970
 
 ###########################################################################
 #SENSITIVITY TESTS- HOW MANY ZERO CR VALUES AND HOW MANY CR VALUES UNDER 20
@@ -86,7 +108,10 @@ levels(crea$CodeUnits)[c(1,5)]<-"umol/L"
 levels(crea$CodeUnits)[c(5)]<-"mmol/L"
 levels(crea$CodeUnits)[c(2:4)]<-"NA"
 crea<-crea[!is.na(crea$CodeUnits),]
-crea$CodeValue<-ifelse(crea$CodeUnits=="mmol/L" & as.numeric(crea$CodeValue)<50,(as.numeric(crea$CodeValue)*1000),as.numeric(crea$CodeValue))
+crea$CodeValue<-ifelse(crea$CodeUnits=="mmol/L" & as.numeric(crea$CodeValue)<50,
+                       (as.numeric(crea$CodeValue)*1000),
+                       as.numeric(crea$CodeValue))
+
 crea$CodeUnits<-"umol/L"
 
 summary(crea)
@@ -98,13 +123,13 @@ crea<-crea %>%
 
 summary(crea)
 
-save(crea,file="crearecleaned.rda")
+save(crea,file="SIR_crearecleaned.rda")
 
 ###############################################################################
 #DATA CLEANING 
 
 #load("sirdatahfonly.rda") #full patient records from all adult hf patients from all years
-#load("crearecleaned.rda") # creatinine data table including tests from selected patients
+#load("SIR_crearecleaned.rda") # creatinine data table including tests from selected patients
 
 #REMOVE SAME DAY CREATININE ENTRIES IF THE SOURCE LOCATION CODE DIFFERS.
 #(OCCURS IN SIR DURING TRANSFER BETWEEN PRIMARY AND SECONDARY CARE EHF SYSTEMS)
@@ -139,16 +164,16 @@ crea$EntryPeriod<-paste(month,year)
 
 crea <- crea %>%
   arrange(PatientID, event.date, desc(Source)) %>%
-    mutate(PatientID.next = c(PatientID[-1], NA),
+    mutate(PatientID.next = c(PatientID[-1], NA), # add columns to identify duplicated values
            event.date.next = c(event.date[-1], NA),
            CodeValue.next = c(CodeValue[-1], NA),
-           Source.next = c(as.character(Source[-1]), NA)) %>% # add columns to identify duplicated values
+           Source.next = c(as.character(Source[-1]), NA)) %>% 
       mutate(diff = event.date.next - event.date,
-             duplicated = (PatientID == PatientID.next) &
-                          (Source != Source.next)&
-                          (Source == "salfordt") &
-                          (CodeValue == CodeValue.next) &
-                          (diff >= 0 & diff <= 30))
+             duplicated = (PatientID == PatientID.next) & # same patient
+                          (Source != Source.next)& # different data source
+                          (Source == "salfordt") & # the oldest is salford
+                          (CodeValue == CodeValue.next) & # same value
+                          (diff >= 0 & diff <= 30)) # within a month
 
 sum(crea$duplicated, na.rm = TRUE) #[1] 99296
 
@@ -165,7 +190,8 @@ xcrea<-smalltab %>%
   group_by(PatientID, EntryDate) %>%
     summarize(Creatinine = mean(as.numeric(as.character(CodeValue)))) %>%
       ungroup()
-crea<-merge(crea,as.data.frame(xcrea),all.x=TRUE)
+crea<-merge(crea,as.data.frame(xcrea),all.x=TRUE) %>%
+  distinct(PatientID, EntryDate, Creatinine, .keep_all = TRUE)
 
 summary(crea)
 
@@ -195,9 +221,9 @@ crea.tmp <- crea[as.numeric(year(strptime(crea$event.date, format="%Y-%m-%d")))>
 ids <- crea.tmp %>%
   group_by(PatientID) %>%
     count() %>%
-      filter(n < 2)
+      filter(n >= 2)
  
-crea.rep <- crea[!(crea$PatientID %in% ids),]
+crea.rep <- crea[(crea$PatientID %in% ids$PatientID),]
 
 sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
 
@@ -208,7 +234,7 @@ sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
 
 #Breakpoint
 #######################################################
-save(crea.rep, file = "crea.rephf2tests.Rdata")
+save(crea.rep, file = "SIR_crea.rephf2tests.Rdata")
 save(sir.data, file = "sir.datahf2tests.Rdata")
 #######################################################
 
@@ -226,20 +252,28 @@ sir.data$event.date <- as.Date(as.character(sir.data$EntryDate),format="%Y%m%d")
 # crea.rep <- crea.rep[-which(crea.rep$PatientID %in% range_short_ids),]
 
 range <- sir.data %>%
-  #filter(event.date >= as.Date("2008-01-01")) %>% # is this to be done with only data after 2008?
-  group_by(PatientID) %>%
-  summarise(min.event.date = min(event.date),
-            max.event.date = max(event.date)) %>% # get earliest and latest date
-  ungroup() %>%
-  mutate(diff = as.numeric((max.event.date - min.event.date)/(365)))  %>% # calculate range in years
-  filter(diff >= 2)
+  filter(event.date >= as.Date("2008-01-01")) %>% # is this to be done with only data after 2008?
+    group_by(PatientID) %>%
+      summarise(min.event.date = min(event.date),
+                max.event.date = max(event.date)) %>% # get earliest and latest date
+       ungroup() %>%
+        mutate(diff = as.numeric(max.event.date - min.event.date)/365)  %>% # calculate range in years
+          filter(diff >= 2)
+
+summary(range)
+# PatientID     min.event.date       max.event.date            diff        
+# Min.   :    1   Min.   :2008-01-01   Min.   :2010-01-03   Min.   :  2.000  
+# 1st Qu.: 5200   1st Qu.:2008-01-03   1st Qu.:2013-10-10   1st Qu.:  5.584  
+# Median :10522   Median :2008-01-09   Median :2016-09-07   Median :  8.397  
+# Mean   :10531   Mean   :2008-02-19   Mean   :2015-05-05   Mean   :  7.210  
+# 3rd Qu.:15789   3rd Qu.:2008-01-23   3rd Qu.:2016-09-28   3rd Qu.:  8.715  
+# Max.   :21246   Max.   :2014-08-18   Max.   :2199-11-11   Max.   :191.858  
 
 crea.rep <- crea.rep %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
 
 sir.data <- sir.data %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
-
 
 
 #ADD ON PRACTISE INFO TO CREA.REP
@@ -272,6 +306,6 @@ s3<-cbind(s1,s2)
 crea.rep<-merge(crea.rep,s3,all.x=TRUE)
 crea.rep$randompracID<-ifelse(crea.rep$Source=="salfordt",0,crea.rep$randompracID)
 
-save(crea.rep,file="crea.rep2yrsall.rda")
+save(crea.rep,file="SIR_crea.rep2yrsall.rda")
 save(sir.data,file="sir.data2yrsall.rda")
 
