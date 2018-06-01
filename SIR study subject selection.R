@@ -27,17 +27,25 @@ length(unique(as.factor(hf$PatientID))) #7254 total heart failure patients ident
 
 hf$Age<-(as.numeric(year(strptime(hf$EntryDate, format="%Y%m%d"))))-hf$BirthYear
 hf$hfage<-hf$Age
-smalltab<-hf[,c("PatientID","hfage","EntryDate")]
-#smalltab$PatientID<-as.factor(smalltab$PatientID)
-smalltab<-smalltab[!is.na(smalltab$hfage),]
 
-first<-
+smalltab<-hf[,c("PatientID","hfage","EntryDate")] %>%
+  distinct() %>%
+    mutate(EntryDate = as.Date(as.character(EntryDate),format="%Y%m%d")) %>%
+      filter(!is.na(hfage)) %>%
+        arrange(PatientID)
+
+#smalltab$PatientID<-as.factor(smalltab$PatientID)
+#smalltab<-smalltab[!is.na(smalltab$hfage),]
+
+first<- # get first HF code
   smalltab %>% 
     group_by(PatientID) %>%
       slice(which.min(hfage)) %>% 
-        ungroup(first) %>%
-          rename(hfdate = EntryDate) %>%
-            mutate(hfdate = as.Date(as.character(hfdate),format="%Y%m%d"))
+        ungroup() %>%
+          rename(hfdate = EntryDate) 
+
+# %>%
+#             mutate(hfdate = as.Date(as.character(hfdate),format="%Y%m%d"))
 
 head(first)
 
@@ -54,7 +62,10 @@ save(sir.data,file="sirdatahfonly.rda")
 ####################################################################################
 #SELECT PATIENTS WITH CREATININE DATA
 crea <- sir.data[sir.data$ReadCode=="44J3.",] #Based on Read Codes v2- adapt as required
-crea <- droplevels(crea)
+
+crea <- crea %>% 
+          distinct() %>% # remove duplicates
+            droplevels()
 
 crea$CodeValue<-as.numeric(as.character(crea$CodeValue))
 crea$CodeUnits <- as.character(crea$CodeUnits)
@@ -74,7 +85,15 @@ table(temp, useNA = "ifany")
 #There are 50 rows affected let's explore the distribution of the values in codevalue
 
 tmp <- crea[!is.na(temp) & temp == TRUE, ]
-summary(tmp)
+summary(tmp %>% mutate(CodeUnits = as.numeric(as.character(CodeUnits))) %>% select(CodeValue, CodeUnits))
+
+# CodeValue   CodeUnits    
+# Min.   :0   Min.   : 61.0  
+# 1st Qu.:0   1st Qu.: 84.5  
+# Median :0   Median : 95.0  
+# Mean   :0   Mean   :103.1  
+# 3rd Qu.:0   3rd Qu.:115.2  
+# Max.   :0   Max.   :227.0  
 
 #these are all 0s with the CodeUnits containing the actual information, let's put them in.
 crea$CodeValue <- ifelse(!is.na(temp) & temp == TRUE, 
@@ -87,18 +106,24 @@ crea$CodeUnits <- ifelse(!is.na(temp) & temp == TRUE,
 
 summary(crea$CodeValue)
 
-crea<-crea[!is.na(crea$CodeValue),]
-length(unique(as.factor(crea$PatientID))) #number of hf patients over 18 at diagnosis with creatinine data
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#     0.0    75.0    93.0   114.9   123.0  2346.0    1385 
+
+# remove zeros and NAs
+crea<-crea %>% 
+        filter(!is.na(CodeValue) & CodeValue > 0)
+
+length(unique(crea$PatientID)) #number of hf patients over 18 at diagnosis with creatinine data
 #6970
 
 ###########################################################################
 #SENSITIVITY TESTS- HOW MANY ZERO CR VALUES AND HOW MANY CR VALUES UNDER 20
-lowcr<-crea[crea$CodeValue<20 & !is.na(crea$CodeValue),] 
+lowcr<-crea[crea$CodeValue<20,] 
 length(lowcr$PatientID) #How many values are present but <20
 levels(as.factor(lowcr$PatientID)) #How many patients are affected
-crea<-crea[crea$CodeValue>0,] #Remove rows with no numeric creatinine value
 
-#Convert values in mmol to umol
+
+##Convert values in mmol to umol
 
 crea$CodeUnits<-as.factor(crea$CodeUnits)
 levels(crea$CodeUnits)
@@ -136,15 +161,7 @@ save(crea,file="SIR_crearecleaned.rda")
 
 crea <- crea[!duplicated(crea[,c("PatientID","EntryDate","CodeValue","Source")]), ]
 
-#crea<-crea[order(crea$PatientID,crea$CodeValue, rev(crea$Source)),]
-# crea2<-crea[(duplicated(crea[,c(1,4,6)])&!duplicated(crea[,7])),] #Find duplicates of value and patient ID with different sources
-# length(crea2$CodeValue)
-# crea3<-crea[(duplicated(crea[,c(1,4,6)])),] #Find duplicates of value, date and patient ID
-# length(crea3$CodeValue) 
-# 
-# crea<-crea[!rownames(crea) %in% rownames(crea2),]
-
-#REMOVE DELAYED CREATININE ENTRIES FROM SAME CALENDAR MONTH IF THE SOURCE LOCATION CODE DIFFERS.
+#REMOVE DELAYED CREATININE ENTRIES FROM UP-TO 30 days APART IF THE SOURCE LOCATION CODE DIFFERS.
 
 crea$event.date<-as.Date(as.character(crea$EntryDate),format="%Y%m%d")
 
@@ -154,7 +171,7 @@ crea$EntryPeriod<-paste(month,year)
 
 ## old version
 # 
-# crea$Source<-ifelse(crea$Source=="salfordt",paste("2"),paste("1")) #Simplify source codes to '2' for hospital, '1' for GP
+crea$Source<-ifelse(crea$Source=="salfordt",paste("2"),paste("1")) #Simplify source codes to '2' for hospital, '1' for GP
 # crea$Source<-ifelse(is.na(crea$Source),paste("2"),crea$Source)
 # 
 # crea<-crea[order(crea[,1], -(crea[,4]),(crea[,7])),]
@@ -163,7 +180,7 @@ crea$EntryPeriod<-paste(month,year)
 # crea<-crea[!rownames(crea) %in% rownames(crea4),]
 
 crea <- crea %>%
-  arrange(PatientID, event.date, desc(Source)) %>%
+  arrange(PatientID, event.date, desc(Source)) %>% # salford will be always first 
     mutate(PatientID.next = c(PatientID[-1], NA), # add columns to identify duplicated values
            event.date.next = c(event.date[-1], NA),
            CodeValue.next = c(CodeValue[-1], NA),
@@ -171,11 +188,11 @@ crea <- crea %>%
       mutate(diff = event.date.next - event.date,
              duplicated = (PatientID == PatientID.next) & # same patient
                           (Source != Source.next)& # different data source
-                          (Source == "salfordt") & # the oldest is salford
+                          (Source == "2") & # the oldest is salford
                           (CodeValue == CodeValue.next) & # same value
                           (diff >= 0 & diff <= 30)) # within a month
 
-sum(crea$duplicated, na.rm = TRUE) #[1] 99296
+sum(crea$duplicated, na.rm = TRUE) #[1] 106389
 
 crea <- crea %>%
   filter(!duplicated)  %>% # remove delayed duplicates
@@ -186,10 +203,12 @@ summary(crea)
 
 #SELECT MEAN DAILY CREATININE IF MULTIPLE ENTRIES AFTER REMOVING DELAYED DUPLICATES AND OUT OF RANGE VALUES
 smalltab<-crea[,c("PatientID","CodeValue", "EntryDate")]
+
 xcrea<-smalltab %>% 
   group_by(PatientID, EntryDate) %>%
     summarize(Creatinine = mean(as.numeric(as.character(CodeValue)))) %>%
       ungroup()
+
 crea<-merge(crea,as.data.frame(xcrea),all.x=TRUE) %>%
   distinct(PatientID, EntryDate, Creatinine, .keep_all = TRUE)
 
@@ -206,13 +225,23 @@ crea$Age<-(as.numeric(year(strptime(crea$event.date, format="%Y-%m-%d"))))-crea$
 ethnic.data<-read.table("ethnic.data.csv",header=TRUE,sep=",") #Call data from lookup table (see Open Source Resources repo)
 ethnic.data$Category<-floor(ethnic.data$Category)
 crea<-merge(crea,ethnic.data,by.x="Ethnicity",by.y="ClinCode2",all.x=TRUE, all.y=FALSE)
-crea<-subset(crea, select=-c(Ethnicity,ClinCode1,EntryPeriod,Rubric))
-colnames(crea)[which(names(crea) == "Category")] <- "Ethnicity"
+
+#old
+# crea<-subset(crea, select=-c(Ethnicity,ClinCode1,EntryPeriod,Rubric))
+# colnames(crea)[which(names(crea) == "Category")] <- "Ethnicity"
+
+crea <- crea %>%
+  select(-Ethnicity, -ClinCode1, -EntryPeriod, -Rubric) %>%
+    rename(Ethnicity = Category)
 
 #ADD LSOA
 imd<-read.csv("IMD2010.csv") #Call data from lookup table (see Open Source Resources repo)
 imd<-imd[,c("LSOA","IMD_Decile2010")]
-crea<-merge(crea,imd,all.x=TRUE)
+
+#old
+#crea<-merge(crea,imd,all.x=TRUE)
+crea <- crea %>%
+  left_join(imd, by = "LSOA")
 
 #LIMIT TO PATIENTS WITH AT LEAST 2 POST 2008 CREATININE TEST VALUES
 
@@ -252,7 +281,8 @@ sir.data$event.date <- as.Date(as.character(sir.data$EntryDate),format="%Y%m%d")
 # crea.rep <- crea.rep[-which(crea.rep$PatientID %in% range_short_ids),]
 
 range <- sir.data %>%
-  filter(event.date >= as.Date("2008-01-01")) %>% # is this to be done with only data after 2008?
+  filter(event.date >= as.Date("2008-01-01") &
+           event.date <= as.Date("2017-08-01")) %>% # limit to after 2008 and remove impossible dates
     group_by(PatientID) %>%
       summarise(min.event.date = min(event.date),
                 max.event.date = max(event.date)) %>% # get earliest and latest date
@@ -261,13 +291,14 @@ range <- sir.data %>%
           filter(diff >= 2)
 
 summary(range)
-# PatientID     min.event.date       max.event.date            diff        
-# Min.   :    1   Min.   :2008-01-01   Min.   :2010-01-03   Min.   :  2.000  
-# 1st Qu.: 5200   1st Qu.:2008-01-03   1st Qu.:2013-10-10   1st Qu.:  5.584  
-# Median :10522   Median :2008-01-09   Median :2016-09-07   Median :  8.397  
-# Mean   :10531   Mean   :2008-02-19   Mean   :2015-05-05   Mean   :  7.210  
-# 3rd Qu.:15789   3rd Qu.:2008-01-23   3rd Qu.:2016-09-28   3rd Qu.:  8.715  
-# Max.   :21246   Max.   :2014-08-18   Max.   :2199-11-11   Max.   :191.858  
+# PatientID     min.event.date       max.event.date            diff      
+# Min.   :    1   Min.   :2008-01-01   Min.   :2010-01-03   Min.   :2.000  
+# 1st Qu.: 5195   1st Qu.:2008-01-03   1st Qu.:2013-10-08   1st Qu.:5.584  
+# Median :10521   Median :2008-01-09   Median :2016-09-07   Median :8.386  
+# Mean   :10529   Mean   :2008-02-19   Mean   :2015-03-20   Mean   :7.085  
+# 3rd Qu.:15784   3rd Qu.:2008-01-23   3rd Qu.:2016-09-28   3rd Qu.:8.715  
+# Max.   :21246   Max.   :2014-08-18   Max.   :2017-07-31   Max.   :9.551 
+
 
 crea.rep <- crea.rep %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
@@ -275,37 +306,46 @@ crea.rep <- crea.rep %>% # remove patients with at least two years follow up
 sir.data <- sir.data %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
 
-
-#ADD ON PRACTISE INFO TO CREA.REP
-prac<-read.csv("PractiseKeySIR.csv")
-pats<-merge(sir.data,prac,all.x=TRUE)
-pats<-pats[!is.na(pats$Source),]
-pats<-pats[!pats$Source=="",]
-pats1<-pats[pats$Source=="salfordt",]
-pats1<-pats1[,c(1,2,4)]
-pats2<-pats[!pats$Source=="salfordt",]
-pats2<-pats2[!duplicated(pats2[,c(2,4)],fromLast=TRUE),]
-pats2<-pats2[,c(1,2,4,5,7)]
-colnames(pats2)[1]<-"Source2"
-pats3<-merge(pats1,pats2,all=TRUE)
-pats3$Source2<-ifelse(is.na(pats3$Source2),paste(pats3$Source),paste(pats3$Source2))
-pats3<-pats3[,c(1,2,4:6)]
-colnames(pats3)[3]<-"Source"
-pats3<-unique(pats3)
-table(pats3$Source)
-length(pats3$Source)
-crea.rep<-merge(crea.rep,pats3,all.x=TRUE)
-
-#Add a random practise ID for splitting the data
-Source<-unique(crea.rep$Source[!crea.rep$Source=="salfordt"])
-Source<-Source[c(1:38,40:57)] #remove NA row (hospital)
-s1<-as.data.frame(Source)
-randompracID<-sample(1:56, 56)
-s2<-as.data.frame(randompracID)
-s3<-cbind(s1,s2)
-crea.rep<-merge(crea.rep,s3,all.x=TRUE)
-crea.rep$randompracID<-ifelse(crea.rep$Source=="salfordt",0,crea.rep$randompracID)
-
 save(crea.rep,file="SIR_crea.rep2yrsall.rda")
 save(sir.data,file="sir.data2yrsall.rda")
+
+
+# # the below introduces duplicates, I am not sure why this was done as well. To look at which practice patients are currently registered to we should look at the latest record
+
+# nrow(crea.rep)
+# #[1] 302531
+
+# #ADD ON PRACTISE INFO TO CREA.REP
+# prac<-read.csv("PractiseKeySIR.csv")
+# pats<-merge(sir.data,prac,all.x=TRUE)
+# pats<-pats[!is.na(pats$Source),]
+# pats<-pats[!pats$Source=="",]
+# pats1<-pats[pats$Source=="salfordt",]
+# pats1<-pats1[,c(1,2,4)]
+# pats2<-pats[!pats$Source=="salfordt",]
+# pats2<-pats2[!duplicated(pats2[,c(2,4)],fromLast=TRUE),]
+# pats2<-pats2[,c(1,2,4,5,7)]
+# colnames(pats2)[1]<-"Source2"
+# pats3<-merge(pats1,pats2,all=TRUE)
+# pats3$Source2<-ifelse(is.na(pats3$Source2),paste(pats3$Source),paste(pats3$Source2))
+# pats3<-pats3[,c(1,2,4:6)]
+# colnames(pats3)[3]<-"Source"
+# pats3<-unique(pats3)
+# table(pats3$Source)
+# length(pats3$Source)
+# crea.rep<-merge(crea.rep,pats3,all.x=TRUE)
+# 
+# #Add a random practise ID for splitting the data
+# Source<-unique(crea.rep$Source[!crea.rep$Source=="salfordt"])
+# Source<-Source[c(1:38,40:57)] #remove NA row (hospital)
+# s1<-as.data.frame(Source)
+# randompracID<-sample(1:56, 56)
+# s2<-as.data.frame(randompracID)
+# s3<-cbind(s1,s2)
+# crea.rep<-merge(crea.rep,s3,all.x=TRUE)
+# crea.rep$randompracID<-ifelse(crea.rep$Source=="salfordt",0,crea.rep$randompracID)
+# 
+# nrow(crea.rep)
+# # [1] 302674
+# 
 
