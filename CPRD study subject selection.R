@@ -25,8 +25,10 @@ system.time(crea<-CPRD3[CPRD3$medcode=="5",]) #1579351 #This is the file with th
 CPRD4<-read_dta("hf_cases_patient_practice_incidentHFdate.dta", encoding = 'latin1')
 glimpse(CPRD4)
 
-CPRD4$hfage<-(as.numeric(year(strptime(CPRD4$eventdate, format="%Y-%m-%d"))))-CPRD4$yob
-CPRD4$hfage<-ifelse(as.numeric(month(strptime(CPRD4$eventdate, format="%Y-%m-%d")))>CPRD4$mob&CPRD4$mob>0,CPRD4$hfage-1,CPRD4$hfage)
+CPRD4$hfage<-(as.numeric(year(strptime(CPRD4$eventdate, format="%Y-%m-%d"))))-CPRD4$yob # calculate age at hf
+CPRD4$hfage<-ifelse(as.numeric(month(strptime(CPRD4$eventdate, format="%Y-%m-%d")))>CPRD4$mob & CPRD4$mob>0,
+                    CPRD4$hfage-1,
+                    CPRD4$hfage)
 
 colnames(CPRD4)
 # [1] "patid"     "eventdate" "medcode"   "readterm"  "nvals"     "gender"    "yob"       "mob"       "marital"   "famnum"   
@@ -58,7 +60,7 @@ summary(CPRD4)
 head(CPRD4[duplicated(CPRD4$patid),]) 
 #None of the records are duplicated- each gives the hfdate based on 97 hf codes
 
-CPRD4<-CPRD4[CPRD4$hfage>=18,]
+CPRD4<-CPRD4[CPRD4$hfage>=18,] # only patients older than 18 at hf date
 save(CPRD4,file="CPRD4.rda")
 hfnames<-unique(CPRD4$patid)
 length(hfnames) 
@@ -96,8 +98,8 @@ save(crea, file = "CPRD_crea.Rdata")
 #START WITH A SKELETON OF CREATININE VALUES THEN ADD ON TO IT.
 
 ##Remove NAs then order and select the mean value per day
-crea<-crea[!is.na(crea$data2),]
-crea<-crea[order(-crea$data2),]
+crea<-crea[!is.na(crea$data2),] # remove NAs
+crea<-crea[order(-crea$data2),] # why in decreasing order?!
 
 #keep only mean value for each day
 smalltab<-crea %>%
@@ -110,7 +112,17 @@ smalltab<-crea %>%
 crea<-merge(crea,as.data.frame(smalltab),all.x=TRUE) %>%  # why are we keeping also the duplicates?
   distinct(patid, eventdate, Creatinine, .keep_all = TRUE)
 
-summary(crea)
+summary(crea$Creatinine)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#       0      84     103     116     131   10100   11608 
+
+
+crea <- crea %>%
+  filter(!is.na(Creatinine)) # there are still NA's let's remove them
+
+summary(crea$Creatinine)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0      84     103     116     131   10100 
 
 save(crea, file = "CPRD_crea2.rda") 
 
@@ -170,7 +182,7 @@ nrow(crea)#[1] 1474502
 
 save(crea, file = "CPRD_crea2.rda")
 length(levels(as.factor(crea$patid)))
-#[1] 120719
+#[1] 120635
 
 ########################################################################################################
 #Add birth and death and basic formulaic variables
@@ -178,7 +190,13 @@ crea$Dead<-ifelse(!is.na(crea$deathdate),1,0)
 #The death dates are not reliable, many of them are before 1950 and 100 are before 1980.
 
 crea$Age<-(as.numeric(year(strptime(crea$eventdate, format="%Y-%m-%d"))))-crea$yob
-crea$Age<-ifelse(as.numeric(month(strptime(crea$eventdate, format="%Y-%m-%d")))>crea$mob&crea$mob>0,crea$Age-1,crea$Age)
+# crea$Age<-ifelse(as.numeric(month(strptime(crea$eventdate, format="%Y-%m-%d")))>crea$mob & crea$mob>0, # this is never true
+#                  crea$Age-1,
+#                  crea$Age)
+
+crea <- crea %>%
+  filter(Age > 0) # exclude impossible values
+
 save(crea, file = "CPRD_crea2.rda")
 crea$log_CREA<-log(crea$Creatinine)
 
@@ -195,7 +213,7 @@ save(crea, file = "CPRD_crea2.rda")
 ########################################################################################################
 
 #Add demographic variables from lookup tables
-CPRD2<-read_dta("hf_cases_clinical.dta")  
+#CPRD2<-read_dta("hf_cases_clinical.dta")  
 
 #CODE ETHNICITY
 eth<-read.table("ethnicitycprd.csv",header=TRUE,sep=",")
@@ -227,6 +245,8 @@ summary(crea)
 
 #Add LSOA
 IMD<-read.csv("patient_imd2010_16_241RMnA.txt",sep="\t")
+colnames(IMD)
+#[1] "patid"     "pracid"    "imd2010_5"
 IMD<-IMD[,c(1,3)]
 colnames(IMD)<-c("PatientID","IMD_Decile2010")
 crea<-merge(crea,IMD,all.x=TRUE)
@@ -254,14 +274,16 @@ crea.tmp <- crea[as.numeric(year(strptime(crea$event.date, format="%Y-%m-%d")))>
 ids <- crea.tmp %>%
   group_by(PatientID) %>%
     count() %>%
-      filter(n > 1)
+      ungroup() %>%
+        filter(n > 1)
+
 # keep only patients with two creatinine after 2008
 crea.rep <- crea[(crea$PatientID %in% ids$PatientID),]
 CPRD2 <- CPRD2[(CPRD2$patid %in% ids$PatientID),]
 
 ##########################################################################
 
-#SELECT PATIENTS WHICH HAVE AT LEAST 2 TESTS AND AT LEAST 2 YEARS DATA
+#SELECT PATIENTS WHICH HAVE AT LEAST 2 TESTS AND AT LEAST 2 YEARS DATA after 2008
 #FIND MIN AND MAX DATES PER PATIENT
 # x1[(which(x1$range<2)),1] -> range_short_ids    # define exclusion range as 2 years
 # crea[-which(crea$PatientID %in% range_short_ids),]->crea.rep 
@@ -270,7 +292,8 @@ CPRD2 <- CPRD2[(CPRD2$patid %in% ids$PatientID),]
 
 
 x1<- CPRD2 %>% 
-  group_by(patid) %>%
+  filter(eventdate >= as.Date("2008-01-01")) %>% 
+    group_by(patid) %>%
     summarize(start=min(eventdate),
               end= max(eventdate)) %>%
       ungroup() %>%
@@ -281,7 +304,23 @@ crea.rep <- crea.rep %>%
   filter(PatientID %in% x1$patid)
 
 summary(crea.rep)
-
+# PatientID          event.date             Gender         deathdate              hfage            hfdate          
+# Min.   :    1268   Min.   :1935-04-27   Min.   :0.0000   Min.   :1913-07-24   Min.   : 18.00   Min.   :1990-01-01  
+# 1st Qu.: 3403670   1st Qu.:2006-05-04   1st Qu.:0.0000   1st Qu.:2011-07-27   1st Qu.: 67.00   1st Qu.:2004-04-23  
+# Median : 7669028   Median :2009-07-20   Median :0.0000   Median :2013-01-01   Median : 75.00   Median :2009-02-09  
+# Mean   :10707875   Mean   :2009-02-16   Mean   :0.4515   Mean   :2012-12-16   Mean   : 73.61   Mean   :2007-11-24  
+# 3rd Qu.:14923047   3rd Qu.:2012-04-27   3rd Qu.:1.0000   3rd Qu.:2014-06-26   3rd Qu.: 82.00   3rd Qu.:2012-05-10  
+# Max.   :92830229   Max.   :2016-06-24   Max.   :1.0000   Max.   :2016-06-22   Max.   :107.00   Max.   :2016-06-23  
+# NA's   :702268                                            
+# Creatinine          Times              Dead             Age           Ethnicity      IMD_Decile2010 
+# Min.   :   20.0   Min.   :      0   Min.   :0.0000   Min.   :  7.00   Min.   :1.0      Min.   :1.000  
+# 1st Qu.:   82.0   1st Qu.:      1   1st Qu.:0.0000   1st Qu.: 68.00   1st Qu.:1.1      1st Qu.:2.000  
+# Median :   99.0   Median :      1   Median :0.0000   Median : 76.00   Median :1.1      Median :3.000  
+# Mean   :  111.6   Mean   :   4532   Mean   :0.3526   Mean   : 74.82   Mean   :1.6      Mean   :2.877  
+# 3rd Qu.:  125.0   3rd Qu.:      1   3rd Qu.:1.0000   3rd Qu.: 83.00   3rd Qu.:1.1      3rd Qu.:4.000  
+# Max.   :10095.5   Max.   :1000000   Max.   :1.0000   Max.   :109.00   Max.   :7.0      Max.   :5.000  
+# NA's   :446774   NA's   :485 
+#  
 save(crea,file="CPRD_crea.repongoing.rda")
 
 
