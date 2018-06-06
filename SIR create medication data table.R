@@ -4,18 +4,21 @@ library("plyr")
 library("dplyr")
 library("tidyr")
 library("splitstackshape")
+library("tidyverse")
 
-#memory.size(1500000)
+setwd("~/Peek_PERMIT")
 
 load("sir.data2yrsall.rda") #Full EHR extract
-load("crea.repongoing.rda") #Primary table with 1 row per patient per date summarising the mean creatinine value per day, with pathology results
+load("SIR_crea.repongoing.rda") #Primary table with 1 row per patient per date summarising the mean creatinine value per day, with pathology results
 inst<-read.csv("inst051217.csv") #Lookup regex file of unique textual precription instructions paired with implications for dose, number etc
 codes1<-read.csv("SIRdrugs.csv") #Lookup of medication type, family, active ingredient etc
 
 #Subset extract if required to enable faster processing
-sir.data<-sir.data[sir.data$EntryDate>=20070101&sir.data$EntryDate<=20170901,] 
-sir.data<-sir.data[(sir.data$ReadCode %in% codes1$CODE & sir.data$PatientID %in% crea.rep$PatientID),]
-
+sir.data <- sir.data %>%
+  filter(event.date >= as.Date("2007-01-01") & event.date <= as.Date("2017-09-01")) %>%
+    filter(ReadCode %in% codes1$CODE & PatientID %in% crea.rep$PatientID) %>%
+      droplevels()
+  
 #Coerce date fields to date format if needed
 sir.data$EntryDate<-as.Date(as.character(sir.data$EntryDate),format="%Y%m%d")
 
@@ -25,10 +28,11 @@ inst$DESCRIPTION<-tolower(inst$DESCRIPTION) #LOWER CASE
 sir.data$CodeUnits<-tolower(sir.data$CodeUnits)
 
 #REMOVE ANY DUPLICATE PRECRIPTION ENTRIES
-sub <- sir.data[,c("PatientID","ReadCode","CodeValue","CodeUnits","EntryDate"),]
-sub <- unique(sub)
-colnames(sub)[colnames(sub) == 'CodeUnits'] <- 'DESCRIPTION' #ENSURE FIELD NAMES MATCH BETWEEN TABLES
-crea.rep <- unique(crea.rep)
+sub <- sir.data %>% 
+        select(PatientID,ReadCode,CodeValue, CodeUnits,EntryDate) %>%
+          distinct() %>%
+            rename(DESCRIPTION = CodeUnits) #ENSURE FIELD NAMES MATCH BETWEEN TABLES
+
 
 #REPLACE WRITTEN NUMBERS WITH NUMBERS 1-6 IN PATIENT DATA (here already complete in instruction data lookup)
 
@@ -41,7 +45,9 @@ sub$DESCRIPTION<-gsub("six", "6", sub$DESCRIPTION)
 
 sub$DESCRIPTION<-tolower(sub$DESCRIPTION)#LOWER CASE
 sub$DESCRIPTION<-gsub(" ", "", sub$DESCRIPTION, fixed = TRUE)  #REMOVE SPACES FROM INSTRUCTION STRINGS (This step already taken in instruction data lookup)
-inst<-inst[!duplicated(inst$DESCRIPTION),] #MAKE SURE NO DUPLICATE LINES IN THE LOOKUP TABLE THAT CAN LEAD TO NAs IN THE FINAL TABLE
+inst<-inst %>% 
+        distinct(DESCRIPTION,.keep_all = TRUE)
+#MAKE SURE NO DUPLICATE LINES IN THE LOOKUP TABLE THAT CAN LEAD TO NAs IN THE FINAL TABLE
 #############################################################################################################
 #JOIN THE INSTRUCTIONS AND RELATED FIELDS ONTO THE MAIN FILE
 
@@ -55,8 +61,14 @@ sub$DESCRIPTION<-gsub("[)]", "", sub$DESCRIPTION)
 inst$DESCRIPTION<-gsub("[)]", "", inst$DESCRIPTION) 
 inst$DESCRIPTION<-gsub("[(]", "", inst$DESCRIPTION) 
 
-ESS<-unique(sub$DESCRIPTION[!sub$DESCRIPTION %in% inst$DESCRIPTION])
-write.csv(ESS,file="EXTRADESCS.csv") #OUTPUT ANY NON PARSING DESCRIPTIONS. ADD TO THE REGEX TABLE, ANNOTATE AND RERUN.
+ESS<-unique(sub$DESCRIPTION[!(sub$DESCRIPTION %in% inst$DESCRIPTION)])
+ESS %>%
+  length() #2
+sub %>% filter(!(DESCRIPTION %in% inst$DESCRIPTION)) %>%
+  nrow() #[1] 29
+
+write.csv(ESS,file="EXTRADESCS.csv") #OUTPUT ANY NON PARSING DESCRIPTIONS. ADD TO THE REGEX TABLE, ANNOTATE AND RERUN
+
 ##################################################################################
 #MARK PRESCRIPTIONS WHICH ARE INTENDED TO BE EXTRA TABLETS TO ADD TO AN EXISTING DOSE OF THE SAME DRUG.
 
@@ -69,32 +81,96 @@ sub$EXTRA<-ifelse(sub$DESCRIPTION %in% AD | sub$DESCRIPTION %in% AD2 |sub$DESCRI
 ############################################################################# 
 #QUANTIFY MISSING PRESCRIPTION DATA
 
-sub<-merge(sub,inst,all.x=TRUE)
-head(sub)
+#sub<-merge(sub,inst,all.x=TRUE)
+sub <- sub %>%
+  left_join(inst, by = "DESCRIPTION")
+
+str(sub)
+# 'data.frame':  1129215 obs. of  6 variables:
+# $ PatientID  : int  1 1 1 1 1 1 1 1 1 1 ...
+# $ ReadCode   : Factor w/ 641 levels "14L..","66R5.",..: 279 279 279 279 279 279 279 279 279 279 ...
+# $ CodeValue  : Factor w/ 157 levels "","0","0.5","000000000P",..: 22 22 34 34 34 34 34 61 61 69 ...
+# $ DESCRIPTION: chr  "tablets" "tablets" "tablets" "tablets" ...
+# $ EntryDate  : Date, format: "2007-03-26" "2007-04-30" "2007-08-02" "2007-09-18" ...
+# $ EXTRA      : num  0 0 0 0 0 0 0 0 0 0 ...
+
+
+#here with the last join we have the info that we need to spot equivalent records for which the only difference is how the prescription is spelled. e.g. take2onthefirstdaythen1eachday and take2todaythen1eachday can be considered as a duplicated record if prescribed for the same patient on the same day for the same drug
+
+sub <- sub %>% 
+  distinct(PatientID, ReadCode, CodeValue, EntryDate, EXTRA, .keep_all = TRUE)
+
 length(sub$DESCRIPTION[sub$DESCRIPTION==""])
-colnames(sub)[colnames(sub) == 'ReadCode'] <- 'CODE'  #RENAME FIELDS IF NEEDED FOR LATER MERGING
+#[1] 4162
+
+sub <- sub %>%
+  rename(CODE = ReadCode)  #RENAME FIELDS IF NEEDED FOR LATER MERGING
 
 #JOIN ON  DOSAGE DATA
-subs<-merge(sub[sub$CODE %in% codes1$CODE,],codes1,all.x=TRUE) #Add ReadCode dosage information
+subs <- sub %>%
+  filter(CODE %in% codes1$CODE) %>%
+    left_join(codes1, by = "CODE")
+
+# for some codes there are multiple rows in codes1 therefore nrow(subs)>nrow(sub)
 
 ########################################################################### 
 #CALCULATE MISSING DATA WHERE POSSIBLE BASED ON PRESENT FIELDS
-
 subs$DAILY_DOSE<-as.numeric(subs$DAILY_DOSE)
-subs$DOSE_PER_TAB<-as.numeric(subs$DOSE_PER_TAB)
-subs$TABLETS_PER_DAY<-as.numeric(subs$TABLETS_PER_DAY)
-subs$DAILY_DOSE<-ifelse(is.na(subs$DAILY_DOSE)&!is.na(subs$TABLETS_PER_DAY),subs$TABLETS_PER_DAY*subs$DOSE_PER_TAB,subs$DAILY_DOSE)
 
-subs$TABLETS_PER_DAY<-ifelse(is.na(subs$TABLETS_PER_DAY)&!is.na(subs$DAILY_DOSE)&!is.na(subs$DOSE_PER_TAB),subs$DAILY_DOSE/subs$DOSE_PER_TAB,subs$TABLETS_PER_DAY)
-summary(subs$EntryDate[is.na(subs$DAILY_DOSE)]) #All dose information is complete after 2013 but not before.
+subs$DOSE_PER_TAB<-as.numeric(subs$DOSE_PER_TAB)
+
+subs$TABLETS_PER_DAY<-as.numeric(subs$TABLETS_PER_DAY)
+
+summary(subs$DAILY_DOSE)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 1.0    24.0    50.0    46.8    71.0    91.0 1251520 
+
+#mostly of daily_dose is NAs, let's try to use the data in the other columns to infer it
+
+subs$DAILY_DOSE<-ifelse(is.na(subs$DAILY_DOSE)&
+                          !is.na(subs$TABLETS_PER_DAY)&
+                          !is.na(subs$DOSE_PER_TAB),
+                        subs$TABLETS_PER_DAY*subs$DOSE_PER_TAB,
+                        subs$DAILY_DOSE)
+
+summary(subs$DAILY_DOSE)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 0.0    10.0    18.0    23.4    35.0  1176.0  614646 
+
+summary(subs$TABLETS_PER_DAY)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 0.000   1.000   1.000   1.216   1.000  50.000    3322 
+# only a minority is NA, let's try to infer it applying an inverse formula
+
+subs$TABLETS_PER_DAY<-ifelse(is.na(subs$TABLETS_PER_DAY)&
+                               !is.na(subs$DAILY_DOSE)&
+                               !is.na(subs$DOSE_PER_TAB),
+                             subs$DAILY_DOSE/subs$DOSE_PER_TAB,
+                             subs$TABLETS_PER_DAY)
+summary(subs$TABLETS_PER_DAY)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 0.000   1.000   1.000   1.217   1.000  50.000    2249 
+
+summary(subs$EntryDate[is.na(subs$DAILY_DOSE)])
+#     Min.      1st Qu.       Median         Mean      3rd Qu.         Max. 
+#"2007-01-01" "2009-10-20" "2011-12-19" "2011-12-23" "2014-03-17" "2017-06-20" 
+
 #FIND THE MEDIAN DOSE FOR EACH DRUG AND USE THIS IF MISSING
 b<-subs[,c("DAILY_DOSE","TYPE")]
 b<-na.omit(b)
-b$DAILY_DOSE<-as.numeric(b$DAILY_DOSE)
-b2<-b %>% group_by(TYPE) %>% summarise(MEDIAN_DOSE = median(DAILY_DOSE, na.rm = TRUE)) %>% as.data.frame
+#b$DAILY_DOSE<-as.numeric(b$DAILY_DOSE)
+b2<-b %>% 
+  group_by(TYPE) %>% 
+    summarise(MEDIAN_DOSE = median(DAILY_DOSE, na.rm = TRUE)) %>% 
+      as.data.frame
 
-subs<-merge(subs,b2,all.x=TRUE)
-subs$DAILY_DOSE<-ifelse(is.na(subs$DAILY_DOSE),subs$MEDIAN_DOSE,subs$DAILY_DOSE)
+# append median_dose in the main dataset
+subs <- subs %>%
+  left_join(b2, by = "TYPE")
+
+subs$DAILY_DOSE<-ifelse(is.na(subs$DAILY_DOSE), # substitute if missing
+                        subs$MEDIAN_DOSE,
+                        subs$DAILY_DOSE)
 
 ############################################################################
 #DIVIDE INTO MULTIPLE ROWS IF THE DOSE CHANGES OVER TIME
@@ -102,84 +178,246 @@ subs$DAILY_DOSE<-ifelse(is.na(subs$DAILY_DOSE),subs$MEDIAN_DOSE,subs$DAILY_DOSE)
 #THEN should contain the number of dose changes (i.e. the number of extra rows you need, so most rows should equal zero.)
 
 #######DEFINE THOSE PRESCRIPTINS WITH PROGRESSIVE DOSING
-# subs$THEN<-ifelse(is.na(subs$THEN),0,subs$THEN)
-# subs$THEN<-as.numeric(subs$THEN)
-# expandRows(subs, "THEN") #Create a copied row for each changing dosage
-# subt<-subs[subs$THEN>0,]
-# head(subt)
-# subnt<-subs[subs$THEN<1,]
 subs$THEN<-ifelse(is.na(subs$THEN),0,subs$THEN)
-subs$THEN<-as.numeric(subs$THEN)
+
 subs$THEN <- subs$THEN +1 # to avoid the non-replication of zeros
 subs <- expandRows(subs, "THEN", drop = FALSE) #Create a copied row for each changing dosage
 subs$THEN <- subs$THEN - 1 # not sure if there is reference to the 0/1 values later but in this way we can bring it back to it
-subt<-subs[subs$THEN>0,]
-str(subt)
-subnt<-subs[subs$THEN < 1,]
+subt<-subs[subs$THEN>0,] # select prescriptions with progressive dosage
+glimpse(subt)
+
+# 'data.frame':  8882 obs. of  21 variables:
+#   $ PatientID      : int  20 20 20 20 20 20 20 20 20 20 ...
+# $ CODE           : chr  "e758." "e758." "e758." "e758." ...
+# $ CodeValue      : Factor w/ 157 levels "","0","0.5","000000000P",..: 130 130 130 130 130 130 130 130 130 130 ...
+# $ DESCRIPTION    : chr  "2nowthen1daily" "2nowthen1daily" "2nowthen1daily" "2nowthen1daily" ...
+# $ EntryDate      : Date, format: "2011-03-21" "2011-03-21" "2011-05-27" "2011-05-27" ...
+# $ EXTRA          : num  0 0 0 0 0 0 0 0 0 0 ...
+# $ TABLETS_PER_DAY: num  2 2 2 2 2 2 2 2 2 2 ...
+# $ DAILY_DOSE     : num  5 5 5 5 5 5 5 5 5 5 ...
+# $ ALT_OTHER_MEDS : Factor w/ 3 levels "1","Replace",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ REP            : Factor w/ 42 levels "Amiodarone","Amlodipine",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ REP2           : Factor w/ 3 levels "Bumetanide","Furosemide",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ THEN           : num  1 1 1 1 1 1 1 1 1 1 ...
+# $ DAYS           : int  1 1 1 1 1 1 1 1 1 1 ...
+# $ NUM2           : num  1 1 1 1 1 1 1 1 1 1 ...
+# $ DOSE2          : num  NA NA NA NA NA NA NA NA NA NA ...
+# $ DESC           : Factor w/ 1152 levels "ACCUPRO 10mg-28CP tabs",..: 356 356 356 356 356 356 356 356 356 356 ...
+# $ TYPE           : Factor w/ 98 levels "Aceclofenac",..: 30 30 30 30 30 30 30 30 30 30 ...
+# $ DOSE_PER_TAB   : num  NA NA NA NA NA NA NA NA NA NA ...
+# $ FAMILY         : Factor w/ 9 levels "ACEI","ALD_ANT",..: 8 8 8 8 8 8 8 8 8 8 ...
+# $ X              : Factor w/ 2 levels "","Loop Diuretics": 1 1 1 1 1 1 1 1 1 1 ...
+# $ MEDIAN_DOSE    : num  5 5 5 5 5 5 5 5 5 5 ...
+
+subnt<-subs[subs$THEN == 0,] # select single prescriptions
 str(subnt)
+
+# 'data.frame':  1260109 obs. of  21 variables:
+#   $ PatientID      : int  1 1 1 1 1 1 1 1 1 1 ...
+# $ CODE           : chr  "META3900" "META3900" "META3900" "META3900" ...
+# $ CodeValue      : Factor w/ 157 levels "","0","0.5","000000000P",..: 22 22 34 34 34 34 34 61 61 69 ...
+# $ DESCRIPTION    : chr  "tablets" "tablets" "tablets" "tablets" ...
+# $ EntryDate      : Date, format: "2007-03-26" "2007-04-30" "2007-08-02" "2007-09-18" ...
+# $ EXTRA          : num  0 0 0 0 0 0 0 0 0 0 ...
+# $ TABLETS_PER_DAY: num  1 1 1 1 1 1 1 1 1 1 ...
+# $ DAILY_DOSE     : num  22 22 22 22 22 22 22 22 22 22 ...
+# $ ALT_OTHER_MEDS : Factor w/ 3 levels "1","Replace",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ REP            : Factor w/ 42 levels "Amiodarone","Amlodipine",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ REP2           : Factor w/ 3 levels "Bumetanide","Furosemide",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ THEN           : num  0 0 0 0 0 0 0 0 0 0 ...
+# $ DAYS           : int  NA NA NA NA NA NA NA NA NA NA ...
+# $ NUM2           : num  NA NA NA NA NA NA NA NA NA NA ...
+# $ DOSE2          : num  NA NA NA NA NA NA NA NA NA NA ...
+# $ DESC           : Factor w/ 1152 levels "ACCUPRO 10mg-28CP tabs",..: 689 689 689 689 689 689 689 689 689 689 ...
+# $ TYPE           : Factor w/ 98 levels "Aceclofenac",..: 61 61 61 61 61 61 61 61 61 61 ...
+# $ DOSE_PER_TAB   : num  22 22 22 22 22 22 22 22 22 22 ...
+# $ FAMILY         : Factor w/ 9 levels "ACEI","ALD_ANT",..: 6 6 6 6 6 6 6 6 6 6 ...
+# $ X              : Factor w/ 2 levels "","Loop Diuretics": 1 1 1 1 1 1 1 1 1 1 ...
+# $ MEDIAN_DOSE    : num  22 22 22 22 22 22 22 22 22 22 ...
 ############################################################################
 
 #EDIT THE DOSES FOR THE REPLICATE ROWS (FOLLOWING DOSE CHANGE)
-subt$DAILY_DOSE<-ifelse(duplicated(subt$PatientID)&duplicated(subt$EntryDate)&duplicated(subt$TYPE),subt$DOSE2,subt$DAILY_DOSE)
-subt$TABLETS_PER_DAY<-ifelse(duplicated(subt$PatientID)&duplicated(subt$EntryDate)&duplicated(subt$TYPE),as.numeric(as.character(subt$NUM2)),subt$TABLETS_PER_DAY)
+subt$DAILY_DOSE<-ifelse(duplicated(subt$PatientID)&
+                          duplicated(subt$EntryDate)&
+                          duplicated(subt$TYPE), 
+                        subt$DOSE2,
+                        subt$DAILY_DOSE)
 
-subt$n<-(subt$TABLETS_PER_DAY*as.numeric(subt$DAYS))
-subt$C1<-ifelse((duplicated(subt$PatientID)&duplicated(subt$EntryDate)&duplicated(subt$TYPE)),1,0)
-subt$CodeValue<-ifelse(subt$C1==1,as.integer(as.numeric(as.character(subt$CodeValue))-as.numeric(as.character(subt$n))),paste(subt$CodeValue))#For the second entry, recalculate the prescription minus what was used up whilst on the original dosage
-subt$EntryDateb<-ifelse(subt$C1==1,subt$EntryDate+subt$DAYS,subt$EntryDate)
+summary(subt$DAILY_DOSE)
+# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 0.280    5.000    5.000    8.249    5.000 1000.000     6188 
+
+subt$TABLETS_PER_DAY<-ifelse(duplicated(subt$PatientID)&
+                               duplicated(subt$EntryDate)&
+                               duplicated(subt$TYPE), #same here
+                             as.numeric(as.character(subt$NUM2)),
+                             subt$TABLETS_PER_DAY)
+
+summary(subt$TABLETS_PER_DAY)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 0.140   1.000   1.000   1.299   2.000   8.000      19 
+
+subt$n<-(subt$TABLETS_PER_DAY*as.numeric(subt$DAYS)) # total tablets prescribred
+
+summary(subt$n)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 0.280   1.000   1.000   1.739   2.000  84.000      19 
+
+subt$C1<-ifelse((duplicated(subt$PatientID)&
+                   duplicated(subt$EntryDate)&
+                   duplicated(subt$TYPE)), # check if duplicated type
+                1,
+                0) 
+table(subt$C1)
+# 0    1 
+# 2612 6270 
+
+subt$CodeValue<-ifelse(subt$C1==1,
+                       as.integer(as.numeric(as.character(subt$CodeValue))-as.numeric(as.character(subt$n))),
+                       paste(subt$CodeValue))#For the second entry, recalculate the prescription minus what was used up whilst on the original dosage
+subt$EntryDateb<-ifelse(subt$C1==1,
+                        subt$EntryDate+subt$DAYS,
+                        subt$EntryDate) # adjust date to plausible prescription date
+
 subt$EntryDate<-as.Date(subt$EntryDateb,origin=(subt$EntryDate[1]-subt$EntryDateb[1]))
+
 subt<-subt[,c(1:19,21)]
 subnt<-subnt[,c(1:19,21)]
+
 meddata<-rbind(subt,subnt)
+str(meddata)
+
+# 'data.frame':  1268991 obs. of  20 variables:
+#   $ PatientID      : int  20 20 20 20 20 20 20 20 20 20 ...
+# $ CODE           : chr  "e758." "e758." "e758." "e758." ...
+# $ CodeValue      : chr  "8" "7" "8" "7" ...
+# $ DESCRIPTION    : chr  "2nowthen1daily" "2nowthen1daily" "2nowthen1daily" "2nowthen1daily" ...
+# $ EntryDate      : Date, format: "2011-03-21" "2011-03-22" "2011-05-27" "2011-05-28" ...
+# $ EXTRA          : num  0 0 0 0 0 0 0 0 0 0 ...
+# $ TABLETS_PER_DAY: num  2 1 2 1 2 1 2 1 2 1 ...
+# $ DAILY_DOSE     : num  5 NA 5 NA 5 NA 5 NA 5 NA ...
+# $ ALT_OTHER_MEDS : Factor w/ 3 levels "1","Replace",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ REP            : Factor w/ 42 levels "Amiodarone","Amlodipine",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ REP2           : Factor w/ 3 levels "Bumetanide","Furosemide",..: NA NA NA NA NA NA NA NA NA NA ...
+# $ THEN           : num  1 1 1 1 1 1 1 1 1 1 ...
+# $ DAYS           : int  1 1 1 1 1 1 1 1 1 1 ...
+# $ NUM2           : num  1 1 1 1 1 1 1 1 1 1 ...
+# $ DOSE2          : num  NA NA NA NA NA NA NA NA NA NA ...
+# $ DESC           : Factor w/ 1152 levels "ACCUPRO 10mg-28CP tabs",..: 356 356 356 356 356 356 356 356 356 356 ...
+# $ TYPE           : Factor w/ 98 levels "Aceclofenac",..: 30 30 30 30 30 30 30 30 30 30 ...
+# $ DOSE_PER_TAB   : num  NA NA NA NA NA NA NA NA NA NA ...
+# $ FAMILY         : Factor w/ 9 levels "ACEI","ALD_ANT",..: 8 8 8 8 8 8 8 8 8 8 ...
+# $ MEDIAN_DOSE    : num  5 5 5 5 5 5 5 5 5 5 ...
 
 ############################################################################
 #ASSIGN DATE OF END OF PRESCRIPTION
 
 m<-(as.numeric(meddata$CodeValue)/as.numeric(meddata$TABLETS_PER_DAY))
-meddata$END_DATE<-ifelse(!is.na(meddata$TABLETS_PER_DAY)&!is.na(subs$CodeValue),meddata$EntryDate+as.difftime(m, unit="days"),NA)
+meddata$END_DATE<-ifelse(!is.na(meddata$TABLETS_PER_DAY)&
+                           !is.na(subs$CodeValue),
+                         meddata$EntryDate+as.difftime(m, unit="days"),
+                         NA)
+summary(meddata$END_DATE)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's
+# 13520   14510   15290     Inf   16120     Inf    9503 
 meddata$END_DATE<-as.Date(meddata$END_DATE,origin="1970-01-01")
 head(meddata)
-save(meddata,file="PERMITmeddata28.rda")
+summary(meddata$END_DATE)
+# Min.      1st Qu.       Median         Mean      3rd Qu.         Max.         NA's 
+# "2007-01-05" "2009-09-25" "2011-11-11"           NA "2014-02-17"           NA       "9503" 
+
+save(meddata,file="SIR_PERMITmeddata28.rda")
 
 ############################################################################
 #STOP INSTRUCTIONS- THOSE WITH STOP INSTRUCTIONS FOR OTHER DRUGS HAVE ENTRIES IN THE ALT_OTHER_MEDS COLUMN
 
-load("PERMITmeddata28.rda")
-meddata<-unique(meddata)
-meddata$REP<-ifelse(meddata$REP=="Same",paste(meddata$TYPE),paste(meddata$REP))
+load("SIR_PERMITmeddata28.rda")
+
+meddata<-meddata %>% 
+  distinct()
+
+meddata$REP<-ifelse(meddata$REP == "Same",
+                    paste(meddata$TYPE),
+                    paste(meddata$REP))
+
 meddata$REP<-as.factor(meddata$REP)
-head(meddata$REP2[!meddata$REP2 %in% meddata$REP])#ALL THOSE IN REP2 ARE ALSO IN REP
+
+table(meddata$REP, useNA = "ifany")
+
+head(meddata$REP2[!(meddata$REP2 %in% meddata$REP)])#ALL THOSE IN REP2 ARE ALSO IN REP
+
 r<-paste(unique(meddata$REP))
-meddata$REP<-ifelse(meddata$REP %in% r & !is.na(meddata$REP),paste(meddata$REP),NA)
-meddata$REP2<-ifelse(meddata$REP2 %in% r& !is.na(meddata$REP2),paste(meddata$REP2),NA) #STOP CODES MAY BE RESTRICTED TO DRUGS NOT OF INTEREST TO US, CHECK IF PROCESSING NEEDED
-table(meddata$REP)
-table(meddata$REP2)#SOME STOPS MAY REFERG TO MORE THAN ONE MEDICATION
-meddata$ALT_OTHER_MEDS<-ifelse(is.na(meddata$REP),NA,meddata$ALT_OTHER_MEDS)
+
+meddata$REP<-ifelse(meddata$REP %in% r & !is.na(meddata$REP),
+                    paste(meddata$REP),
+                    NA)
+
+meddata$REP2<-ifelse(meddata$REP2 %in% r& !is.na(meddata$REP2),
+                     paste(meddata$REP2),
+                     NA) #STOP CODES MAY BE RESTRICTED TO DRUGS NOT OF INTEREST TO US, CHECK IF PROCESSING NEEDED
+table(meddata$REP, useNA = "ifany")
+
+table(meddata$REP2, useNA = "ifany")#SOME STOPS MAY REFERG TO MORE THAN ONE MEDICATION
+
+# Bumetanide Furosemide   Ramipril       <NA> 
+#   4         40          4             1267110 
+
+meddata$ALT_OTHER_MEDS<-ifelse(is.na(meddata$REP),
+                               NA,
+                               meddata$ALT_OTHER_MEDS)
 
 ################################################################################### 
 #NEAREST DATE MATCH TO THE LAST PRIOR ENTRY OF THE DRUG BEING STOPPED
 coda<-meddata[!is.na(meddata$REP),]
-stops<-meddata[meddata$TYPE %in% meddata$REP,c("PatientID","EntryDate","END_DATE","TYPE")]
+stops<-meddata %>% 
+  filter(TYPE %in% meddata$REP) %>% 
+    select(PatientID,EntryDate,END_DATE,TYPE)
+
 columns=names(stops[c(1,2,4)])
+
 dots<-lapply(columns, as.symbol)
 first <-stops %>% 
 group_by_(.dots=dots) %>%
 as.data.frame 
+
 library(survival)
 
 first$NEWENDDATE<-NA
 for (i in 1:length(unique(first$TYPE))){
-codab<-coda[coda$REP==first$TYPE[i],]
-indx<-neardate(first$PatientID, codab$PatientID, first$EntryDate,codab$EntryDate,best="after")
-first$NEWENDDATE<-(ifelse(first$TYPE==first$TYPE[i],codab[indx,"EntryDate"],first$NEWENDDATE))
+  
+codab<- coda[coda$REP==first$TYPE[i],]
+indx<- neardate(first$PatientID, 
+                codab$PatientID, 
+                first$EntryDate,
+                codab$EntryDate,
+                best="after")
+
+first$NEWENDDATE<-(ifelse(first$TYPE==first$TYPE[i],
+                          codab[indx,"EntryDate"],
+                          first$NEWENDDATE))
+
 }
+
 first$NEWENDDATE<-as.Date(first$NEWENDDATE,origin="1970-01-01")
 head(first[!is.na(first$NEWENDDATE),])
 
-first<-first[!is.na(first$NEWENDDATE)&first$NEWENDDATE>first$EntryDate&first$NEWENDDATE<first$END_DATE,c("PatientID","EntryDate","END_DATE","TYPE","NEWENDDATE")]
+first<-first[!is.na(first$NEWENDDATE)&
+               first$NEWENDDATE>first$EntryDate &
+               first$NEWENDDATE<first$END_DATE,
+             c("PatientID","EntryDate","END_DATE","TYPE","NEWENDDATE")]
+
 length(first$PatientID)#50 prescriptions are affected
-meddata<-merge(meddata,first,all.x=TRUE)
-meddata$END_DATE<-ifelse(!is.na(meddata$NEWENDDATE)&meddata$END_DATE>meddata$NEWENDDATE&meddata$EntryDate<meddata$NEWENDDATE,meddata$NEWENDDATE,meddata$END_DATE)
+
+meddata <- merge(meddata,
+                 first,
+                 all.x=TRUE)
+
+meddata$END_DATE<-ifelse(!is.na(meddata$NEWENDDATE)&
+                           meddata$END_DATE>meddata$NEWENDDATE &
+                           meddata$EntryDate<meddata$NEWENDDATE,
+                         meddata$NEWENDDATE,
+                         meddata$END_DATE)
+
 meddata$END_DATE<-as.Date(meddata$END_DATE,origin="1970-01-01")
 save(meddata,file="PERMITmeddata28.rda")
 
@@ -214,7 +452,10 @@ ex[!is.na(ex$TYPE),] #2 specific entries are impacted
 ##################################################################### 
 
 #CONVERT VOLUME DOSAGES FOR LIQUID MEDS. OMIT WATER TO AVOID PICKING UP SOLID DOSE MEDS INSTRUCTED TO BE DISSOLVED IN WATER.
-meddata$CodeValue<-ifelse(grepl("ml",meddata$DESCRIPTION)&!grepl("water",meddata$DESCRIPTION),as.numeric(meddata$CodeValue)/5,as.numeric(meddata$CodeValue))
+meddata$CodeValue <- ifelse(grepl("ml",meddata$DESCRIPTION)&
+                              !grepl("water",meddata$DESCRIPTION),
+                            as.numeric(meddata$CodeValue)/5,
+                            as.numeric(meddata$CodeValue))
 
 meddata<-unique(meddata)
 meddata$DAILY_DOSE<-signif(meddata$DAILY_DOSE,digits=2)
