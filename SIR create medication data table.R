@@ -329,7 +329,8 @@ summary(meddata$END_DATE)
 save(meddata,file="SIR_PERMITmeddata28.rda")
 
 ############################################################################
-#STOP INSTRUCTIONS- THOSE WITH STOP INSTRUCTIONS FOR OTHER DRUGS HAVE ENTRIES IN THE ALT_OTHER_MEDS COLUMN
+#REPLACE INSTRUCTIONS- ROWS WITH INSTRUCTIONS WHICH RELATE TO THE REPLACEMENT OF DRUGS WITH
+#A NEW DRUG OR NEW LEVEL OF DOSE HAVE DATA WHICH HAS BEEN ENTERED IN THE ALT_OTHER_MEDS COLUMN (Short for alterations to other medications)
 
 load("SIR_PERMITmeddata28.rda")
 
@@ -340,10 +341,16 @@ meddata$REP<-ifelse(meddata$REP == "Same",
                     paste(meddata$TYPE),
                     paste(meddata$REP))
 
+#REP refers to the replacement of one prescribed drug with an ongoing prescription with another drug (e.g. due to adverse reaction)
+#"Same" in the REP column means that an ongoing prescription for a drug is being replaced by a different instruction or dosage for the same drug"
+#e.g. "Take instead of the 10mg tablets"
+#So, if REP is "same", we paste the drug name from TYPE. If REP lists another drug, we action changes to the end date of the last prescription of that drug
+
 meddata$REP<-as.factor(meddata$REP)
 
 table(meddata$REP, useNA = "ifany")
 
+#Check there are no situations in which 2 or more different drugs are simultaneously being replaced
 head(meddata$REP2[!(meddata$REP2 %in% meddata$REP)])#ALL THOSE IN REP2 ARE ALSO IN REP
 
 r<-paste(unique(meddata$REP))
