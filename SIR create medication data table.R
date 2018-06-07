@@ -471,7 +471,7 @@ columns=names(smalltab[c(1:3)])
 dots<-lapply(columns, as.symbol)
 firstU <-smalltab %>% 
 group_by_(.dots=dots) %>%
-as.data.frame
+s.data.frame
 
 firstU$AddDate<-NA
 firstU$AddDose<-NA
@@ -500,8 +500,12 @@ names(firstU)
 #firstU is then merged onto subx (all rows not in ex), and this collectively replaces the prior version of meddata.
 
 ##################################################################### 
+#In meddata the most common oral liquid dose prescribed is a 5ml dose
+#this is assumed if the instruction says something like "TAKE ONCE A DAY"
+#All CodeValue values for oral liquids are given as mg/5ml in the original meddata file 
 
-#CONVERT VOLUME DOSAGES FOR LIQUID MEDS. OMIT WATER TO AVOID PICKING UP SOLID DOSE MEDS INSTRUCTED TO BE DISSOLVED IN WATER.
+#CONVERT VOLUME DOSAGES FOR LIQUID MEDS TO GET mg/ml. 
+#OMIT WATER TO AVOID PICKING UP SOLID DOSE MEDS INSTRUCTED TO BE DISSOLVED IN WATER.
 meddata$CodeValue <- ifelse(grepl("ml",meddata$DESCRIPTION)&
                               !grepl("water",meddata$DESCRIPTION),
                             as.numeric(meddata$CodeValue)/5,
@@ -509,13 +513,19 @@ meddata$CodeValue <- ifelse(grepl("ml",meddata$DESCRIPTION)&
 
 meddata<-unique(meddata)
 meddata$DAILY_DOSE<-signif(meddata$DAILY_DOSE,digits=2)
+
+#In the original file two drug types were assigned the wrong family, this corrects that.
+#You may prefer to permenantly correct this in the original file.
 meddata$FAMILY<-ifelse(meddata$TYPE=="Doxycycline",paste("Antimicrobial"),paste(meddata$FAMILY))
 meddata$FAMILY<-ifelse(meddata$TYPE=="Chloretracycline",paste("Chlortetracycline"),paste(meddata$FAMILY))
-meddata$EntryDate<-as.Date(meddata$EntryDate,format="%d/%m/%Y")
-meddata$END_DATE<-as.Date(meddata$END_DATE,format="%d/%m/%Y")
 
-#Correct any analagous types
+#You may or may not need the lines below here depending on what format you are in at this point
+#meddata$EntryDate<-as.Date(meddata$EntryDate,format="%d/%m/%Y")
+#meddata$END_DATE<-as.Date(meddata$END_DATE,format="%d/%m/%Y")
+
+#Corrects two analagous types based on typing errors, again you may prefer to adapt the original file to correct this
 meddata$TYPE<-ifelse(meddata$TYPE=="Hydrochlorothiazide",paste("Hydrochlorthiazide"),paste(meddata$TYPE))
 meddata$TYPE<-ifelse(meddata$TYPE=="Trandopril",paste("Trandolapril"),paste(meddata$TYPE))
 
+#This gives you your output file ready to add on the drugs columns to your main table, 1 row per prescribed drug per patient per date
 save(meddata,file="PERMITmeddata28.rda")
