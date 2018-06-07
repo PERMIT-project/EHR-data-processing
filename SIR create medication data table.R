@@ -329,8 +329,9 @@ summary(meddata$END_DATE)
 save(meddata,file="SIR_PERMITmeddata28.rda")
 
 ############################################################################
-#REPLACE INSTRUCTIONS- ROWS WITH INSTRUCTIONS WHICH RELATE TO THE REPLACEMENT OF DRUGS WITH
-#A NEW DRUG OR NEW LEVEL OF DOSE HAVE DATA WHICH HAS BEEN ENTERED IN THE ALT_OTHER_MEDS COLUMN (Short for alterations to other medications)
+#STOP/REPLACE INSTRUCTIONS- ROWS WITH INSTRUCTIONS WHICH RELATE TO THE REPLACEMENT OF DRUGS WITH
+#A NEW DRUG OR NEW LEVEL OF DOSE HAVE DATA WHICH HAS BEEN ENTERED IN THE ALT_OTHER_MEDS COLUMN 
+#(Short for alterations to other medications)
 
 load("SIR_PERMITmeddata28.rda")
 
@@ -351,9 +352,12 @@ meddata$REP<-as.factor(meddata$REP)
 table(meddata$REP, useNA = "ifany")
 
 #Check there are no situations in which 2 or more different drugs are simultaneously being replaced
-head(meddata$REP2[!(meddata$REP2 %in% meddata$REP)])#ALL THOSE IN REP2 ARE ALSO IN REP
+head(meddata$REP2[!(meddata$REP2 %in% meddata$REP)]) #ALL THOSE IN REP2 ARE ALSO IN REP
 
-r<-paste(unique(meddata$REP))
+#Make a small subset table for processing purposes of ongoing drug prescriptions which are being replaced
+#before their end dates so we can edit these rows
+#restrict to drugs of interest to the study
+r<-paste(unique(meddata$TYPE))
 
 meddata$REP<-ifelse(meddata$REP %in% r & !is.na(meddata$REP),
                     paste(meddata$REP),
@@ -361,26 +365,26 @@ meddata$REP<-ifelse(meddata$REP %in% r & !is.na(meddata$REP),
 
 meddata$REP2<-ifelse(meddata$REP2 %in% r& !is.na(meddata$REP2),
                      paste(meddata$REP2),
-                     NA) #STOP CODES MAY BE RESTRICTED TO DRUGS NOT OF INTEREST TO US, CHECK IF PROCESSING NEEDED
-table(meddata$REP, useNA = "ifany")
-
-table(meddata$REP2, useNA = "ifany")#SOME STOPS MAY REFERG TO MORE THAN ONE MEDICATION
-
-# Bumetanide Furosemide   Ramipril       <NA> 
-#   4         40          4             1267110 
-
+                     NA) 
 meddata$ALT_OTHER_MEDS<-ifelse(is.na(meddata$REP),
                                NA,
                                meddata$ALT_OTHER_MEDS)
+#Replace irrelevant drug changes in ALT_OTHER_MEDS
 
-################################################################################### 
-#NEAREST DATE MATCH TO THE LAST PRIOR ENTRY OF THE DRUG BEING STOPPED
+#NEAREST DATE MATCH OF THE REPLACEMENT INSTRUCTION TO THE LAST PRIOR ENTRY OF THE DRUG BEING STOPPED/REPLACED
+#USING SIMILAR LOGIC TO THE CONDITIONAL VARIABLE EXTRACTION
+
+#Speed things up by subsetting meddata to those drugs listed in REP
+#(There are only a few, typically those causing interaction problems)
+
 coda<-meddata[!is.na(meddata$REP),]
 stops<-meddata %>% 
   filter(TYPE %in% meddata$REP) %>% 
     select(PatientID,EntryDate,END_DATE,TYPE)
+#Stops is a subset table of prescriptions of drugs listed in REP
+#Coda is a subset of rows instructing replacement or stop of a drug
 
-columns=names(stops[c(1,2,4)])
+columns=names(stops[c(1,2,4)]) #This should be PatientID, EntryDate and TYPE
 
 dots<-lapply(columns, as.symbol)
 first <-stops %>% 
@@ -388,6 +392,9 @@ group_by_(.dots=dots) %>%
 as.data.frame 
 
 library(survival)
+
+#Create a new end date column to reflect truncation of the prescription based on near date match to a prior stop command
+#Which occurs after the start and before the original prescription end date
 
 first$NEWENDDATE<-NA
 for (i in 1:length(unique(first$TYPE))){
@@ -405,6 +412,9 @@ first$NEWENDDATE<-(ifelse(first$TYPE==first$TYPE[i],
 
 }
 
+#For each row prescribing a drug with some stop codes listed in our stops table, see if there is a stop recorded in REP
+#after the prescription date
+
 first$NEWENDDATE<-as.Date(first$NEWENDDATE,origin="1970-01-01")
 head(first[!is.na(first$NEWENDDATE),])
 
@@ -413,11 +423,16 @@ first<-first[!is.na(first$NEWENDDATE)&
                first$NEWENDDATE<first$END_DATE,
              c("PatientID","EntryDate","END_DATE","TYPE","NEWENDDATE")]
 
-length(first$PatientID)#50 prescriptions are affected
+#Be careful with neardate- we have told it to look for entries after the EntryDate but if it does not find one
+#it will look for one before EntryDate. Here we confirm that the stop instruction fell between the entry and original end date
+
+length(first$PatientID) #Count how many prescriptions are affected
 
 meddata <- merge(meddata,
                  first,
                  all.x=TRUE)
+#Each affected entry now has and ENDDATE and NEWENDDATE. We take the earlier of the two and replace ENDDATE then proceed as
+#with all other unaffected rows.
 
 meddata$END_DATE<-ifelse(!is.na(meddata$NEWENDDATE)&
                            meddata$END_DATE>meddata$NEWENDDATE &
@@ -426,8 +441,10 @@ meddata$END_DATE<-ifelse(!is.na(meddata$NEWENDDATE)&
                          meddata$END_DATE)
 
 meddata$END_DATE<-as.Date(meddata$END_DATE,origin="1970-01-01")
-save(meddata,file="PERMITmeddata28.rda")
+#save(meddata,file="PERMITmeddata28.rda") #If you want to overwrite at this point
 
+#IF YOU HAVE ENTRIES IN REP2 AT THIS POINT YOU NEED TO REPEAT THE PROCESS AGAIN FOR REP2 AS FOR REP. 
+#AND SO ON FOR REP3 ETC IF YOU NEED THIS IN YOUR SPECIFIC CONTEXT.
 ####################################################################################
 #DEAL WITH 'EXTRAS'
 ex<-meddata[meddata$EXTRA==1,]
