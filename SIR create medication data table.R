@@ -401,6 +401,7 @@ for (i in 1:length(unique(first$TYPE))){
   
 codab<- coda[coda$REP==first$TYPE[i],]
 indx<- neardate(first$PatientID, 
+
                 codab$PatientID, 
                 first$EntryDate,
                 codab$EntryDate,
@@ -446,32 +447,57 @@ meddata$END_DATE<-as.Date(meddata$END_DATE,origin="1970-01-01")
 #IF YOU HAVE ENTRIES IN REP2 AT THIS POINT YOU NEED TO REPEAT THE PROCESS AGAIN FOR REP2 AS FOR REP. 
 #AND SO ON FOR REP3 ETC IF YOU NEED THIS IN YOUR SPECIFIC CONTEXT.
 ####################################################################################
-#DEAL WITH 'EXTRAS'
+#DEAL WITH 'EXTRAS'- SOMETIMES A DOSE SUPPLEMENTS ANOTHER OF THE SAME DRUG
+#e.g. "TAKE IN ADDITION TO THE TABLET IN YOUR DOSETTE" if a dose increase is being made temporarily
+#SUCH ENTRIES ARE MARKED WITH A 1 IN THE "EXTRA" COLUMN- THIS IS BINARY AND DOES NOT REFLECT TABLET NUMBER
+
+#Create subsets with and without
 ex<-meddata[meddata$EXTRA==1,]
 subx<-meddata[meddata$EXTRA==0,]
 ex<-ex[ex$TYPE %in% subx$TYPE & ex$PatientID %in% subx$PatientID & ex$EntryDate>=subx$EntryDate & ex$END_DATE<subx$END_DATE,]
-ex[!is.na(ex$TYPE),] #2 specific entries are impacted
-#head(subx)
-#smalltab<-ex[,c("PatientID","TYPE","EntryDate","END_DATE","DAILY_DOSE")]
-#columns=names(smalltab[c(1:3)])
-#dots<-lapply(columns, as.symbol)
-#firstU <-smalltab %>% 
-#group_by_(.dots=dots) %>%
-#as.data.frame
+#Why are we not calling meddata here? Because if we do this then we amend the rows in ex also and these become our neardate first matches.
+#A good alternative would be for ex to be defined as meddate minus rows listed in ex with the existing date restrictions.
 
-#firstU$AddDate<-NA
-#firstU$AddDose<-NA
-#for (i in 1:unique(as.factor(firstU$TYPE))){
-#exb<-ex[ex$TYPE==firstU$TYPE[i],]
-#indx<-neardate(firstU$PatientID, subx$PatientID, firstU$EntryDate,subx$EntryDate,best="after")
-#firstU$AddDate<-(ifelse(firstU$TYPE==firstU$TYPE[i],subx[indx,"EntryDate"],firstU$AddDate))
-#firstU$AddDose<-(ifelse(firstU$TYPE==firstU$TYPE[i],subx[indx,"DAILY_DOSE"],firstU$AddDose))
-#}
-#firstU$AddDate<-as.Date(firstU$AddDate,origin="1970-01-01")
-#head(firstU[!is.na(firstU$AddDate),])
-#firstU<-firstU[!is.na(firstU$AddDate)&firstU$AddDate>=firstU$EntryDate&firstU$AddDate<firstU$END_DATE,c("PatientID","EntryDate","END_DATE","TYPE","AddDate","AddDose")]
-#length(firstU$PatientID)#1252 prescriptions are affected
-#names(firstU)
+ex[!is.na(ex$TYPE),] #Count how many specific entries are impacted- has been very few previously
+
+#THE BELOW CODE SECTION WAS NOT APPLIED SO HAS NOT BEEN CHECKED FOR FUNCTION AS ONLY 2 ENTRIES WERE PREVIOUSLY AFFECTED. 
+#DUE TO TIME RESTRICTIONS IT MADE SENSE TO AMEND THESE DIRECTLY RATHER THAN SYSTEMATICALLY
+#AND BECAUSE THIS DATA WAS TABULATED IN CPRD
+#SO CHECK THE BELOW CAREFULLY
+
+head(subx)
+smalltab<-ex[,c("PatientID","TYPE","EntryDate","END_DATE","DAILY_DOSE")]
+columns=names(smalltab[c(1:3)])
+dots<-lapply(columns, as.symbol)
+firstU <-smalltab %>% 
+group_by_(.dots=dots) %>%
+as.data.frame
+
+firstU$AddDate<-NA
+firstU$AddDose<-NA
+for (i in 1:unique(as.factor(firstU$TYPE))){
+exb<-ex[ex$TYPE==firstU$TYPE[i],]
+indx<-neardate(firstU$PatientID, subx$PatientID, firstU$EntryDate,subx$EntryDate,best="after")
+firstU$AddDate<-(ifelse(firstU$TYPE==firstU$TYPE[i],subx[indx,"EntryDate"],firstU$AddDate))
+firstU$AddDose<-(ifelse(firstU$TYPE==firstU$TYPE[i],subx[indx,"DAILY_DOSE"],firstU$AddDose))
+}
+
+#for each entry detailing a change, near date match to a prior entry of the same prescription
+#Mark when the additional dose is added and how many mg per day are being added.
+
+firstU$AddDate<-as.Date(firstU$AddDate,origin="1970-01-01")
+head(firstU[!is.na(firstU$AddDate),])
+firstU<-firstU[!is.na(firstU$AddDate)&firstU$AddDate>=firstU$EntryDate&firstU$AddDate<firstU$END_DATE,c("PatientID","EntryDate","END_DATE","TYPE","AddDate","AddDose")]
+#Again, ensure the addition happens between the prescription start and end date
+
+length(firstU$PatientID)#Count how many prescriptions are affected
+names(firstU)
+
+#I didn't get this far but what needs to happen here is that rows in firstU are replicated, with truncation of the first copy of each row with the AddDate replacing ENDDATE and retention of the original DAILY_DOSE
+#In the second copy of each row, AddDate becomes EntryDate and the DAILY-DOSE has the AddDose added on.
+#See rows 176-260- you can use this as a template.
+
+#firstU is then merged onto subx (all rows not in ex), and this collectively replaces the prior version of meddata.
 
 ##################################################################### 
 
