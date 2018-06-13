@@ -307,6 +307,7 @@ summarise_units_distribution(sir.data, BUN1.csv$ReadCode)
 sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode & 
                         as.numeric(as.character(sir.data$CodeUnits))>=1 & 
                         (!is.na(sir.data$temp) | sir.data$temp == 0),
+                      as.numeric(as.character(sir.data$CodeUnits)),
                       sir.data$temp)
 
 smalltab<-sir.data[!is.na(sir.data$temp) & 
