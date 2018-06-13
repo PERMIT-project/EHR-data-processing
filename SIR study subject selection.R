@@ -8,6 +8,11 @@ library("lubridate")
 
 load("sir.data.rda") #Load lng format input file
 
+sir.data$event.date <- as.Date(as.character(sir.data$EntryDate),format="%Y%m%d")
+
+sir.data <- sir.data %>%
+              filter(!(event.date<as.Date("1900-01-01") | event.date>as.Date("2017-08-01")))
+
 
 #READ CONDITION FILES- suffix names with a common suffix to import together
 temp = list.files(pattern="*1.csv")
@@ -243,6 +248,187 @@ imd<-imd[,c("LSOA","IMD_Decile2010")]
 crea <- crea %>%
   left_join(imd, by = "LSOA")
 
+length(unique(crea$PatientID))
+#6971
+
+### add DEATH data
+sir.data$DeathDate <- sir.data$EntryDate 
+
+Death_codes1.csv <- Death_codes1.csv %>%
+  filter(!grepl("^94Z", ReadCode5byte)) # remove codes with "Preferred place of death as they do not give definitve indication of death"
+
+sir.data$DeathDate<-ifelse((sir.data$ReadCode  %in%  Death_codes1.csv$ReadCode5byte) |
+                             (sir.data$ReadCode  %in%  Death_codes1.csv$ReadCode7byte),
+                           sir.data$DeathDate,
+                           NA)
+
+summary(sir.data$DeathDate)
+#     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19820000 20120000 20130000 20130000 20150000 20160000 23872015 
+
+smalltab<-sir.data[!is.na(sir.data$DeathDate),
+                   c("PatientID","DeathDate","ReadCode", "Rubric")]
+
+first<-smalltab %>%
+  group_by(PatientID) %>%  
+  arrange(DeathDate) %>% 
+  slice(which.max(as.numeric(DeathDate))) %>% # keep max because sometimes there are less specific codes that are recorded (e.g. discussed place of death) and patients live for some more months 
+  as.data.frame %>%
+  select(-Rubric, -ReadCode)
+
+head(first)
+#   PatientID DeathDate
+# 1         1  20131231
+# 2         4  20160107
+# 3         7  20150811
+# 4         8  20160927
+# 5         9  20160923
+# 6        18  20130311
+
+crea<-crea %>% 
+  left_join(first, by = "PatientID")
+
+crea$DeathDate<-as.Date(as.character(crea$DeathDate),format="%Y%m%d")
+
+crea$DaysUntilDeath<- as.numeric(crea$event.date - crea$DeathDate)
+
+summary(crea$DaysUntilDeath)
+#     Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#  -11890   -2378   -1108   -1475    -295   11340  199030 
+
+# we need to investigate patients with creatinine after death
+
+crea <- crea %>%
+  arrange(PatientID, event.date)
+
+faulty_IDs <- unique(crea %>% 
+                       filter(DaysUntilDeath > 0 & !is.na(DaysUntilDeath)) %>% 
+                       select(PatientID))
+
+nrow(faulty_IDs)
+# [1] 31
+
+tmp <- crea %>% 
+  filter(PatientID %in% faulty_IDs$PatientID) %>%
+  filter(DaysUntilDeath >0) %>% # consider only exams after death
+  group_by(PatientID) %>%
+  summarise(n = n(), # get summary statics for each patient
+            min = min(DaysUntilDeath),
+            first = quantile(DaysUntilDeath, 0.25),
+            median = median(DaysUntilDeath),
+            third = quantile(DaysUntilDeath, 0.75),
+            max = max(DaysUntilDeath)) %>%
+  arrange(desc(n))
+
+print(tmp, n = 50)
+
+# A tibble: 31 x 7
+# PatientID     n   min   first  median    third   max
+# <int> <int> <dbl>   <dbl>   <dbl>    <dbl> <dbl>
+# 1      9203    63  1561 2476.    3323    3342.    3416
+# 2     16578    55   106 1024     1377    2003     2694
+# 3      7859    51     9  296.     781    2268.    3075
+# 4      5945    46   366  942.    1548.   2040     2354
+# 5      5062    23   476 2580     2631    2674.    2769
+# 6     11632    21  6766 8212    10020   10377    11339
+# 7     10738    20  1412 2393     2821    2830     2838
+# 8     18639    16   156 1205.    2572.   3202.    3827
+# 9      1972    15     1   11.5     22      26.5     35
+# 10      1015     9     1   15       23      30       36
+# 11      4100     9     3    8       11      14       16
+# 12      3823     8     1    8.5     13.5    17.2     19
+# 13      4250     7    88 1202     2242    2488.    2684
+# 14     11563     7     1    2.5      4       6        9
+# 15     11343     6     2    4.25     5.5     9.75    14
+# 16      1815     5     1    3        6       7        9
+# 17      1885     5     3    5        6      12       15
+# 18     11699     5     4    8       10      14       16
+# 19     14321     5     5    7       12      14       15
+# 20      3876     4     1    1.75     2.5     3.25     4
+# 21      6441     4     1    3.25     5       6.5      8
+# 22     19249     4     1    3.25     5       6.5      8
+# 23      9355     3     1    1.5      2       2.5      3
+# 24     11743     3     6    7.5      9      11       13
+# 25      9806     2     1    1.25     1.5     1.75     2
+# 26     10440     2     1    1.25     1.5     1.75     2
+# 27      1720     1     1    1        1       1        1
+# 28      8756     1    99   99       99      99       99
+# 29     11661     1  1756 1756     1756    1756     1756
+# 30     16060     1     1    1        1       1        1
+# 31     16890     1     2    2        2       2        2
+# We investigated this issue by producing some summary tables showing some statistics on the different types of records that these patients, and others who have other types of records after the supposed death date (total of 851), have after death. We considered as dead all patients with data ceasing with a month to the death date or with only prescription data ceasing in three months. That left us with 120 patients for whom two researchers screened the summary records, identifying that nine had a death code in their records by mistake. In fact, they had any kind of record (e.g. presciptions, exams, diagnosis, ecc) for years.
+
+
+patients_to_correct <- c(9203,
+                         16578,
+                         7859,
+                         5062,
+                         11632,
+                         10738,
+                         18639,
+                         5945,
+                         4250)
+
+crea <- crea %>%
+  mutate(DeathDate = ifelse(PatientID %in% patients_to_correct,
+                            NA,
+                            DeathDate),
+         DaysUntilDeath = ifelse(PatientID %in% patients_to_correct,
+                                 NA,
+                                 DaysUntilDeath))
+
+summary(crea$DeathDate)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#    9856   15190   15860   15810   16460   17070  205662
+
+# R converted this to numeric, let's convert it back to Date
+if(is.numeric(crea$DeathDate)){
+  
+  crea <- crea %>% 
+    mutate(DeathDate = DeathDate + as.Date("1970-01-01"))
+  
+}
+
+summary(crea$DeathDate)
+# Min.      1st Qu.       Median         Mean      3rd Qu.         Max.         NA's 
+# "1996-12-26" "2011-08-06" "2013-06-06" "2013-04-16" "2015-01-26" "2016-09-30"     "205662" 
+
+summary(crea$DaysUntilDeath)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# -11890   -2323   -1085   -1454    -292       0  205662 
+
+crea$Death<-ifelse(is.na(crea$DeathDate),0,1) # this will indicate wether the patient died at any time
+
+nrow(crea %>% filter(Death == 1)  %>% distinct(PatientID, Death))
+#[1] 2060
+
+## finally let's remove all the creatinine and sir data after the death date for the ones who have it
+crea <- crea %>%
+  filter(DeathDate >= event.date | is.na(DeathDate))
+
+summary(crea$DaysUntilDeath)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# -11890   -2323   -1085   -1454    -292       0  205662 
+
+sir.data$DeathDate <- NULL
+
+sir.data <- sir.data %>%
+              #select(-DeathDate) %>%
+                left_join(crea %>% 
+                            distinct(PatientID, DeathDate),
+                        by = "PatientID") %>%
+                  filter(DeathDate >= event.date | is.na(DeathDate)) %>%
+                    mutate(DaysUntilDeath = as.numeric(event.date - DeathDate))
+
+summary(sir.data$DaysUntilDeath)
+# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+#-42530    -2684    -1436    -1839     -582        0 17459290 
+
+#everything seems to be fine now
+
+length(unique(crea$PatientID))
+#[1] 6971
+
 #LIMIT TO PATIENTS WITH AT LEAST 2 POST 2008 CREATININE TEST VALUES
 
 crea.tmp <- crea[as.numeric(year(strptime(crea$event.date, format="%Y-%m-%d")))>=2008,]
@@ -256,10 +442,8 @@ crea.rep <- crea[(crea$PatientID %in% ids$PatientID),]
 
 sir.data<-sir.data[sir.data$PatientID %in% crea.rep$PatientID,]
 
-
-# # add hfdate and age to crea.rep
-# crea.rep <- crea.rep %>%
-#   left_join(first, by = "PatientID")
+length(unique(crea.rep$PatientID))
+#[1] 6630
 
 #Breakpoint
 #######################################################
@@ -269,16 +453,6 @@ save(sir.data, file = "sir.datahf2tests.Rdata")
 
 
 #SELECT PATIENTS WHICH HAVE AT LEAST 2 TESTS, OPTION FOR TIME RANGE RESTRICTION
-
-sir.data$event.date <- as.Date(as.character(sir.data$EntryDate),format="%Y%m%d") #Ensure dates are in date format
-#ranges <- aggregate(as.numeric(year(strptime(sir.data$event.date, format="%Y-%m-%d"))), list(sir.data$PatientID), range)
-
-# Error in range$range <- ranges$x[, 2] - ranges$x[, 1] : 
-#   object of type 'builtin' is not subsettable
-
-# range$range <- ranges$x[,2] - ranges$x[,1]
-# range_short_ids <- ranges[(which(ranges$range<2)),1] # define exclusion range as 2 years
-# crea.rep <- crea.rep[-which(crea.rep$PatientID %in% range_short_ids),]
 
 range <- sir.data %>%
   filter(event.date >= as.Date("2008-01-01") &
@@ -292,13 +466,12 @@ range <- sir.data %>%
 
 summary(range)
 # PatientID     min.event.date       max.event.date            diff      
-# Min.   :    1   Min.   :2008-01-01   Min.   :2010-01-03   Min.   :2.000  
-# 1st Qu.: 5195   1st Qu.:2008-01-03   1st Qu.:2013-10-08   1st Qu.:5.584  
+# Min.   :    1   Min.   :2008-01-01   Min.   :2010-01-03   Min.   :2.003  
+# 1st Qu.: 5194   1st Qu.:2008-01-03   1st Qu.:2013-10-07   1st Qu.:5.575  
 # Median :10521   Median :2008-01-09   Median :2016-09-07   Median :8.386  
-# Mean   :10529   Mean   :2008-02-19   Mean   :2015-03-20   Mean   :7.085  
-# 3rd Qu.:15784   3rd Qu.:2008-01-23   3rd Qu.:2016-09-28   3rd Qu.:8.715  
-# Max.   :21246   Max.   :2014-08-18   Max.   :2017-07-31   Max.   :9.551 
-
+# Mean   :10529   Mean   :2008-02-19   Mean   :2015-03-18   Mean   :7.080  
+# 3rd Qu.:15786   3rd Qu.:2008-01-23   3rd Qu.:2016-09-28   3rd Qu.:8.715  
+# Max.   :21246   Max.   :2014-08-18   Max.   :2017-07-31   Max.   :9.551
 
 crea.rep <- crea.rep %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
@@ -306,9 +479,11 @@ crea.rep <- crea.rep %>% # remove patients with at least two years follow up
 sir.data <- sir.data %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
 
+length(unique(crea.rep$PatientID))
+
 save(crea.rep,file="SIR_crea.rep2yrsall.rda")
 save(sir.data,file="sir.data2yrsall.rda")
-
+#[1] 6251
 
 # # the below introduces duplicates, I am not sure why this was done as well. To look at which practice patients are currently registered to we should look at the latest record
 
