@@ -247,11 +247,11 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode,
 
 summarise_units_distribution(sir.data, BUN1.csv$ReadCode)
 # A tibble: 49 x 7
-#   CodeUnits   min   first median  third    max      N
-#   <fct>     <dbl>   <dbl>  <dbl>  <dbl>  <dbl>  <int>
-# 1 mmol/L     0      5.4     7.2   10.4  234    428711
+# CodeUnits   min   first median  third    max      N
+# <fct>     <dbl>   <dbl>  <dbl>  <dbl>  <dbl>  <int>
+#   1 mmol/L     0      5.4     7.2   10.4  234    428170
 # 2 ""         0      4.4     5.8    7.3  463      1958
-# 3 mmol/l     1.6    5.1     6.7    8.9  124      1466
+# 3 mmol/l     1.6    5.1     6.7    8.9  124      1450
 # 4 None       0      0       0      0      0       277
 # 5 umol/L     0.54 343.    426    545    913       192
 # 6 MMOL/L     2.7    5.3     6.4   11.6   31        84
@@ -307,7 +307,6 @@ summarise_units_distribution(sir.data, BUN1.csv$ReadCode)
 sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode & 
                         as.numeric(as.character(sir.data$CodeUnits))>=1 & 
                         (!is.na(sir.data$temp) | sir.data$temp == 0),
-                      sir.data$CodeUnits,
                       sir.data$temp)
 
 smalltab<-sir.data[!is.na(sir.data$temp) & 
@@ -339,7 +338,7 @@ crea.rep$BUN_DF<-ifelse(crea.rep$BUNDateFlag==0,crea.rep$BUN,NA)
 summary(crea.rep$BUN)
 
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 3.10    4.40    6.00    6.84    7.00   23.30  300390 
+#    3.10    4.40    6.00    6.84    7.00   23.30  299952 
 
 #MEAN DAILY SERUM POTASSIUM #1 MONTH DATE FLAG
 sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode,
@@ -347,11 +346,11 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode,
                       NA)
 summarise_units_distribution(sir.data, SerumPotassium1.csv$ReadCode)
 
-# A tibble: 11 x 7
+# # A tibble: 11 x 7
 # CodeUnits   min first median third   max      N
 # <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl>  <int>
-# 1 mmol/L     0.77  4      4.4   4.8  405   420996
-# 2 mmol/l     0     4.2    4.5   4.9  309     1982
+#   1 mmol/L     0.77  4      4.4   4.8  405   420442
+# 2 mmol/l     0     4.2    4.5   4.9  309     1967
 # 3 ""         0     4      4.4   4.7  309     1953
 # 4 None       0     0      0     0      0      182
 # 5 mmoL/L     3.4   3.95   4.1   4.20   4.3      7
@@ -404,15 +403,14 @@ summarise_units_distribution(sir.data, HeartRate1.csv$ReadCode)
 # # A tibble: 8 x 7
 #   CodeUnits      min first median third   max     N
 #   <fct>        <dbl> <dbl>  <dbl> <dbl> <dbl> <int>
-# 1 /minute          5  64       73  82     150  5273
+# 1 /minute          5  64       73  82     150  5275
 # 2 beats/min       34  63       72  81     160  1513
 # 3 Beats/min       42  60       68  79.8   138   622
-# 4 beats/minute     0  63.2     71  80     179   582
+# 4 beats/minute     0  63.5     71  80     179   579
 # 5 ""              48  60       64  76    2472    50
 # 6 /min            58  68       76  80     120    17
 # 7 None             0   0        0   0       0    12
 # 8 bpm             80  80       80  80      80     1
-
 #units are fine, incorrect values will be removed by the below filter
 
 smalltab<-sir.data[!is.na(sir.data$temp)&
@@ -439,8 +437,8 @@ crea.rep$HeartRateDateFlag<-ifelse(is.na(crea.rep$HeartRateDateFlag),0,crea.rep$
 crea.rep$HeartRate_DF<-ifelse(crea.rep$HeartRateDateFlag==0,crea.rep$HeartRate,NA)
 
 summary(crea.rep$HeartRate)
-# Min.    1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 34.00   64.00   74.00   75.25   84.00  179.00  270420 
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# 34.00   64.00   74.00   75.24   84.00  179.00  269997
 
 #MEAN BNP #1 YEAR
 sir.data$temp<-ifelse(sir.data$ReadCode %in% BNP1.csv$ReadCode,
@@ -449,12 +447,12 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% BNP1.csv$ReadCode,
 #1ng/L=1pg/ml
 summarise_units_distribution(sir.data, BNP1.csv$ReadCode)
 # # A tibble: 4 x 7
-# CodeUnits   min first median third   max     N
-# <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl> <int>
-# 1 ng/L         12  283.   828. 2180. 36520   828
-# 2 ""           78  695.  1486  2634.  7397    10
-# 3 None          0    0      0     0      0     6
-# 4 pg/mL      3119 3119   3119  3119   3119     1
+#   CodeUnits   min first median third   max     N
+#   <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl> <int>
+# 1 ng/L         12  283     831 2181  36520   829
+# 2 ""           78  695.   1486 2634.  7397    10
+# 3 None          0    0       0    0      0     6
+# 4 pg/mL      3119 3119    3119 3119   3119     1
 
 #units are fine, zeros removed by the below filter
 
@@ -485,7 +483,7 @@ crea.rep$BNP_DF<-ifelse(crea.rep$BNPDateFlag==0,crea.rep$BNP,NA)
 
 summary(crea.rep$BNP)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 12.0   148.0   374.0   409.4   627.0   986.0  296509 
+# 12.0   148.0   374.0   409.4   627.0   986.0  296071 
 
 #MEAN NT-PRO BNP #1 YEAR
 sir.data$temp<-ifelse(sir.data$ReadCode %in% NTPROBNP1.csv$ReadCode,
@@ -499,8 +497,7 @@ summarise_units_distribution(sir.data, NTPROBNP1.csv$ReadCode)
 # 1 ng/L         15 366     982. 1993  25976    90
 # 2 None          0   0       0     0      0    23
 # 3 pg/mL        56  84.2  1271  2481.  7092    12
-# 4 ""          131 131     131   131    131     1
-# 
+# 4 ""          131 131     131   131    131     1# 
 
 #units are fine
 smalltab<-sir.data[!is.na(sir.data$temp)&
@@ -531,7 +528,7 @@ crea.rep$NTPROBNP_DF<-ifelse(crea.rep$NTPROBNPDateFlag==0,crea.rep$NTPROBNP,NA)
 
 summary(crea.rep$NTPROBNP)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 15     241     948    1502    1877    4875  301832 
+# 15     241     948    1502    1877    4875  301394
 
 #MIN DAILY SYSTOLIC BP #30 DAYS
 sir.data$SBP<-ifelse(sir.data$ReadCode %in% SBP1.csv$ReadCode,
@@ -541,16 +538,15 @@ sir.data$SBP<-ifelse(sir.data$ReadCode %in% SBP1.csv$ReadCode,
 sir.data$temp<-sir.data$SBP
 
 summarise_units_distribution(sir.data, SBP1.csv$ReadCode)
-# # A tibble: 6 x 7
-#   CodeUnits   min first median third   max      N
-#   <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl>  <int>
-# 1 mm Hg         0  125     138  150  16078 269970
-# 2 ""           11  116     130  146  96110  32618
+# A tibble: 6 x 7
+# CodeUnits   min first median third   max      N
+# <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl>  <int>
+# 1 mm Hg         0  125     138  150  16078 269861
+# 2 ""           11  116     130  146  96110  32598
 # 3 mmHg         33  118     130  140    260   3563
 # 4 mm hg        96  126     136  144.   214    338
 # 5 None          0    0       0    0      0    186
-# 6 mm[Hg]      108  114.    123  133    165     11 
-
+# 6 mm[Hg]      108  114.    123  133    165     11
 #it is fine, the None values and unrealistic high values will be removed by the below
 
 smalltab<-sir.data[!is.na(sir.data$temp)&
@@ -577,8 +573,7 @@ crea.rep$SBPDateFlag<- ifelse(as.numeric(abs(crea.rep$event.date - first$event.d
 
 summary(crea.rep$SBP)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 33.0   120.0   130.0   131.4   142.0   276.0    9359
-
+# 33.0   120.0   130.0   131.4   142.0   276.0    9339 
 
 #MIN DAILY DIASTOLIC BP #30 DAYS
 sir.data$DBP<-ifelse(sir.data$ReadCode %in% DBP1.csv$ReadCode,as.numeric(paste(sir.data$CodeValue)),NA)
@@ -671,13 +666,13 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% UAlbumin1.csv$ReadCode,
 summarise_units_distribution(sir.data, UAlbumin1.csv$ReadCode)
 
 # # A tibble: 7 x 7
-#   CodeUnits   min first median third    max     N
-#   <fct>     <dbl> <dbl>  <dbl> <dbl>  <dbl> <int>
-# 1 mg/L          0 4.4     10.8 42    7271   19157
+# CodeUnits   min first median third    max     N
+# <fct>     <dbl> <dbl>  <dbl> <dbl>  <dbl> <int>
+#   1 mg/L          0 4.4     10.8 42    7271   19157
 # 2 ""            0 0        4.8 12.2  3216     175
 # 3 None          0 0        0    0       0     111
 # 4 g/L           0 0.47     1.9  6.04  187      52
-# 5 mg/l          0 0        0    0     131.     35
+# 5 mg/l          0 0        0    0     131.     32
 # 6 mg/mmol       0 0.475    1   20.6    73.5     7
 # 7 g             5 5        5    5       5       1
 
@@ -715,7 +710,7 @@ crea.rep$UrineAlbuminDateFlag<- ifelse(as.numeric(abs(crea.rep$event.date - firs
 
 summary(crea.rep$UrineAlbumin)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 0.00    4.70   12.60   74.49   53.10 1000.00  176388 
+# 0.00    4.70   12.50   74.12   53.00 1000.00  176238
 
 #MEAN DAILY URINE ALBUMIN CREATININE RATIO #1 YEAR DATE FLAG
 sir.data$temp<-ifelse(sir.data$ReadCode %in% UACR1.csv$ReadCode,
@@ -723,19 +718,19 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% UACR1.csv$ReadCode,
                       NA)
 
 summarise_units_distribution(sir.data, UACR1.csv$ReadCode)
-#   CodeUnits        min first median  third     max     N
-#   <fct>          <dbl> <dbl>  <dbl>  <dbl>   <dbl> <int>
-# 1 g/mol           0    0.82    1.98   7.25 9850    33438
-# 2 mg/mmol         0    0.76    1.78   5.05  905.    2888
+# # A tibble: 10 x 7
+# CodeUnits        min first median  third     max     N
+# <fct>          <dbl> <dbl>  <dbl>  <dbl>   <dbl> <int>
+#   1 g/mol           0    0.82    1.98   7.23 9850    33444
+# 2 mg/mmol         0    0.75    1.78   5.03  905.    2876
 # 3 None            0    0       0      0       0     1823
 # 4 ""              0    0       0      1.33 7789      577
-# 5 ratio           0.1  0.932   2.14   7.16   81.9     88
+# 5 ratio           0.1  0.772   2.05   5.79   81.9     92
 # 6 mg/mmol(creat)  0.15 0.730   1.49   2.16    3.78     6
 # 7 mmol/L          4.4  7.7   104.   200     200        4
 # 8 0.2             0    0       0      0       0        1
 # 9 GPL U/ml        0    0       0      0       0        1
 # 10 1.06            0    0       0      0       0        1
-
 # let's only keep g/mol, mg/mmol and ratio
 
 sir.data$temp<-ifelse(sir.data$ReadCode %in% UACR1.csv$ReadCode&
@@ -767,7 +762,7 @@ crea.rep$UACDateFlag<- ifelse(as.numeric(abs(crea.rep$event.date - first$event.d
 
 summary(crea.rep$UACratio)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 0.00    0.88    2.13   19.33    9.14 1193.00  164842
+#    0.00    0.88    2.13   19.29    9.08 1193.00  164724 
 
 #MAX DAILY MEAN CORPUSCULAR VOLUME #120 DAY DATE FLAG
 sir.data$temp<-ifelse(sir.data$ReadCode %in% MCV1.csv$ReadCode,
@@ -777,13 +772,13 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% MCV1.csv$ReadCode,
 summarise_units_distribution(sir.data, MCV1.csv$ReadCode)
 
 # # A tibble: 27 x 7
-#   CodeUnits   min first median third   max      N
-#   <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl>  <int>
-# 1 fL         0.8   86.6   90.6  94.7 146.  167305
-# 2 fl         0.41  86.5   90.3  94   148.  143251
+# CodeUnits   min first median third   max      N
+# <fct>     <dbl> <dbl>  <dbl> <dbl> <dbl>  <int>
+# 1 fL         0.8   86.6   90.6  94.7 146.  167206
+# 2 fl         0.41  86.5   90.3  94   148.  142880
 # 3 ""         0     86.9   90.6  93.6 120     1324
-# 4 microns   68.2   85.5   90    94.6 109.     316
-# 5 *fl       74.5   87.7   92.1  94.8 122.      85
+# 4 microns   68.2   85.5   89.9  94.6 109.     313
+# 5 *fl       74.5   87.8   92.1  94.8 122.      86
 # 6 None       0      0      0     0     0       32
 # 7 85.2       0      0      0     0     0        2
 # 8 100        0      0      0     0     0        2
@@ -839,7 +834,7 @@ crea.rep$MCVDateFlag<- ifelse(as.numeric(abs(crea.rep$event.date - first$event.d
 
 summary(crea.rep$MCV)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 50.90   86.50   90.30   90.29   94.10  144.70    5659 
+#   50.90   86.50   90.30   90.29   94.10  144.70    5646
 
 #MAX DAILY HAEMOGLOBIN #120 DAY DATE FLAG
 sir.data$temp<-ifelse(sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode,
@@ -849,21 +844,29 @@ sir.data$temp<-ifelse(sir.data$ReadCode %in% Haemoglobin1.csv$ReadCode,
 summarise_units_distribution(sir.data, Haemoglobin1.csv$ReadCode)
 
 # # A tibble: 37 x 7
-#   CodeUnits    min first median third        max      N
-#   <fct>      <dbl> <dbl>  <dbl> <dbl>      <dbl>  <int>
-# 1 g/L         5.2  108    122   136          231 162227
-# 2 g/l         0    108    124   137          232 142942
-# 3 mmol/mol    0     42     49    61          178  30558
+# CodeUnits    min first median third        max      N
+# <fct>      <dbl> <dbl>  <dbl> <dbl>      <dbl>  <int>
+#   1 g/L         5.2  108    122   136          231 162131
+# 2 g/l         0    109    124   137          232 142576
+# 3 mmol/mol    0     42     49    61          178  30576
 # 4 None        0      0      0     0            0   7389
-# 5 g/dL        0     12.3   13.7  16          219   6596
+# 5 g/dL        0     12.3   13.7  16          219   6585
 # 6 ""          0      0      0   102.         205   3860
-# 7 g/dl        0.81  12.1   13.3  15.5        178    893
-# 8 *g/L        1.28  13.1   14.6 111          163    110
+# 7 g/dl        0.81  12.1   13.3  15.5        178    890
+# 8 *g/L        1.28  13.1   14.7 111.         163    112
 # 9 %           5.3    6.4    6.9   8.4 3720370000     43
 # 10 150         0      0      0     0            0      3
 # 11 mg/L       11.6   43.2   74.8 106.         138      2
 # 12 mmol/L    130    130    130   130          130      2
 # 13 mmol/mmol  60     78     96   114          132      2
+# 14 146         0      0      0     0            0      2
+# 15 124         0      0      0     0            0      2
+# 16 135         0      0      0     0            0      2
+# 17 148         0      0      0     0            0      2
+# 18 137         0      0      0     0            0      2
+# 19 131         0      0      0     0            0      2
+# 20 141         0      0      0     0            0      2
+# 21 %Hb       145    145    145   145          145      1
 
 #let's convert everything to g/l
 
@@ -924,6 +927,6 @@ crea.rep$HaemDateFlag<- ifelse(as.numeric(abs(crea.rep$event.date - first$event.
 
 summary(crea.rep$Haemoglobin)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# 30.0   105.0   122.0   119.8   137.0   230.0    5542
+# 30.0   105.0   122.0   119.9   137.0   230.0    5534 
 
 save(crea.rep, file = "SIR_crea.repongoing.rda")
