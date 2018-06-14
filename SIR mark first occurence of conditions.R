@@ -52,17 +52,17 @@ sir.data$NephDate<-ifelse(!(sir.data$ReadCode  %in%  Nephrectomy1.csv$ReadCode),
                           sir.data$NephDate) 
 
 summary(sir.data$NephDate)
-# Min.      1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 19460000 19930000 20040000 19970000 20100000 20150000 23874723 
+# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19460000 19930000 20040000 19970000 20100000 20150000 23853452 
 
 smalltab<-sir.data[!is.na(sir.data$NephDate),
                    c("PatientID","NephDate")]
 
 first<-smalltab %>%
     group_by(PatientID) %>%
-    arrange(NephDate) %>%
-    slice(which.min(NephDate)) %>%
-as.data.frame
+      arrange(NephDate) %>%
+        slice(which.min(NephDate)) %>%
+          as.data.frame
 head(first)
 
 # PatientID NephDate
@@ -82,11 +82,13 @@ summary(first$NephDate)
 crea.rep <- crea.rep %>%
   left_join(first, by = "PatientID")
 
-crea.rep$DaysSinceNephrectomy<-as.numeric(difftime(strptime(crea.rep$NephDate,format="%Y-%m-%d"),strptime(crea.rep$event.date,format="%Y-%m-%d"),unit="days"))
+crea.rep$DaysSinceNephrectomy<-as.numeric(difftime(strptime(crea.rep$NephDate,format="%Y-%m-%d"),
+                                                   strptime(crea.rep$event.date,format="%Y-%m-%d"),
+                                                   unit="days"))
 
 summary(crea.rep$DaysSinceNephrectomy)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-#  -25820  -10060   -4335   -6108    -811    5627  298373 
+#  -25820  -10060   -4335   -6108    -811    5627  297935 
 
 crea.rep$DaysSinceNephrectomy<-ifelse(crea.rep$DaysSinceNephrectomy<0,
                                       NA,
@@ -98,7 +100,7 @@ crea.rep$Nephrectomy<-ifelse(is.na(crea.rep$DaysSinceNephrectomy),
 
 calculate_prev(d = crea.rep, column = 'Nephrectomy')
 #   patients_number affected_patients  prevalence
-# 1            6257                26 0.004155346
+# 1            6251                26 0.004159335
 
 
 #RRT
@@ -110,7 +112,7 @@ sir.data$RRTDate<-ifelse(!sir.data$ReadCode  %in%  Dialysis1.csv$ReadCode,
 
 summary(sir.data$RRTDate)
 # Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 19900000 20090000 20130000 20110000 20140000 20160000 23874580 
+# 19900000 20090000 20130000 20110000 20140000 20160000 23853313 
 
 smalltab<-sir.data[!is.na(sir.data$RRTDate),
                    c("PatientID","RRTDate")]
@@ -122,13 +124,13 @@ first<-smalltab %>%
           as.data.frame
 
 head(first)
-# PatientID  RRTDate
-# 1       367 20060623
-# 2      1028 20130925
-# 3      1516 20080401
-# 4      1667 20060622
-# 5      1765 20080929
-# 6      1955 20030101
+#   PatientID  RRTDate
+# 1      1028 20130925
+# 2      1516 20080401
+# 3      1667 20060622
+# 4      1765 20080929
+# 5      1955 20030101
+# 6      2104 20121231
 
 first$RRTDate<-as.Date(as.character(first$RRTDate),
                        format="%Y%m%d")
@@ -142,8 +144,8 @@ crea.rep$DaysSinceRRT<-difftime(strptime(crea.rep$event.date,format="%Y-%m-%d"),
                           as.numeric()
 
 summary(crea.rep$DaysSinceRRT)
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# -7492.0  -567.0   151.5   411.5  1346.0  9357.0  291216
+#     Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# -7492.0  -590.3   148.5   413.0  1390.0  9357.0  290920
 
 crea.rep$DaysSinceRRT<-ifelse(crea.rep$DaysSinceRRT<0,
                               NA,
@@ -153,7 +155,7 @@ crea.rep$RRT<-ifelse(is.na(crea.rep$DaysSinceRRT),0,1)
 
 calculate_prev(d = crea.rep, column = 'RRT')
 #   patients_number affected_patients prevalence
-# 1            6257                72 0.01150711
+# 1            6251                71 0.01135818
 
 #DIABETES
 sir.data$DiabDate<-sir.data$EntryDate 
@@ -198,19 +200,19 @@ crea.rep$Diabetes<-ifelse(is.na(crea.rep$DaysSinceDiabetic),0,1)
 
 calculate_prev(d = crea.rep, column = 'Diabetes')
 #   patients_number affected_patients prevalence
-# 1            6257              1944   0.310692
+# 1            6251              1942  0.3106703
 
 
 #ATRIAL FIBRILLATION
 sir.data$AFDate<-sir.data$EntryDate 
 
-sir.data$AFDate<-ifelse(!sir.data$ReadCode  %in%  AF1.csv$ReadCode,
+sir.data$AFDate<-ifelse(!(sir.data$ReadCode  %in%  AF1.csv$ReadCode),
                         NA,
                         sir.data$AFDate)
 
 summary(sir.data$AFDate)
-# Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-# 18000000 20060000 20100000 20090000 20130000 21990000 
+# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19370000 20060000 20100000 20090000 20130000 20160000 23843868
 
 smalltab<-sir.data[!is.na(sir.data$AFDate),
                    c("PatientID","AFDate")]
@@ -224,12 +226,12 @@ first<-smalltab %>%
 head(first)
 
 #   PatientID   AFDate
-# 1         1 19700129
-# 2         4 19290628
-# 3         7 19471101
-# 4         8 19740513
-# 5         9 19830101
-# 6        18 19241229
+# 1         4 20140411
+# 2        20 20070214
+# 3        25 19931213
+# 4        37 20050819
+# 5        38 19940521
+# 6        41 20120512
 
 first$AFDate<-as.Date(as.character(first$AFDate),format="%Y%m%d")
 
@@ -252,7 +254,7 @@ crea.rep$AF<-ifelse(is.na(crea.rep$DaysSinceAF),0,1)
 calculate_prev(d = crea.rep, column = 'AF')
 
 #   patients_number affected_patients prevalence
-# 1            6257              2507  0.4006712
+# 1            6251              2503  0.4004159
 
 
 #IHD - Ischemic Heart Disease
@@ -264,8 +266,8 @@ sir.data$IHDDate<-ifelse(!(sir.data$ReadCode  %in%  IHD1.csv$ReadCode)&
                          sir.data$IHDDate)
 
 summary(sir.data$IHDDate)
-#     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 18990000 20030000 20070000 20070000 20110000 20160000 23841143 
+# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19570000 20030000 20070000 20070000 20110000 20160000 23819919 
 
 smalltab<-sir.data[!is.na(sir.data$IHDDate),
                    c("PatientID","IHDDate")]
@@ -277,7 +279,14 @@ first<-smalltab %>%
           as.data.frame
 
 head(first)
-   
+# PatientID  IHDDate
+# 1         1 20091223
+# 2         7 20070619
+# 3         9 20060124
+# 4        24 20140420
+# 5        25 19850101
+# 6        27 20070806
+
 crea.rep <- crea.rep %>%
   left_join(first, by = "PatientID")
 
@@ -298,7 +307,7 @@ crea.rep$IHD<-ifelse(is.na(crea.rep$DaysSinceIHD),
 
 calculate_prev(d = crea.rep, column = 'IHD')
 #   patients_number affected_patients prevalence
-# 1            6257              3962  0.6332108
+# 1            6251              3957  0.6330187
 
 #PERIPHERAL VASCULAR DISEASE
 sir.data$PVDDate<-sir.data$EntryDate
@@ -309,7 +318,7 @@ sir.data$PVDDate<-ifelse(!(sir.data$ReadCode  %in%  PVD1.csv$ReadCode),
 
 summary(sir.data$PVDDate)
 #     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 18990000 20010000 20070000 20050000 20110000 20160000 23867327 
+# 19490000 20010000 20070000 20050000 20110000 20160000 23846064 
 
 smalltab<-sir.data[!is.na(sir.data$PVDDate),c("PatientID","PVDDate")]
 
@@ -340,8 +349,8 @@ crea.rep$DaysSincePVD <- difftime(strptime(crea.rep$event.date,format="%Y-%m-%d"
                             as.numeric()
 
 summary(crea.rep$DaysSincePVD)
-#     Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-#   -8219      44    1971    2839    4641   42560  162462
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#   -8219      47    1974    2832    4642   23580  162130
 
 crea.rep$DaysSincePVD<-ifelse(crea.rep$DaysSincePVD<0,
                               NA,
@@ -353,7 +362,7 @@ crea.rep$PVD<-ifelse(is.na(crea.rep$DaysSincePVD),
 
 calculate_prev(d = crea.rep, column = 'PVD')
 #   patients_number affected_patients prevalence
-# 1            6257              2446  0.3909222
+# 1            6251              2444  0.3909774
 
 #RENAL MALIGNANCY
 sir.data$RMALDate<-sir.data$EntryDate
@@ -363,8 +372,8 @@ sir.data$RMALDate<-ifelse(!sir.data$ReadCode  %in%  RM1.csv$ReadCode,
                           sir.data$RMALDate)
 
 summary(sir.data$RMALDate)
-#     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 19830000 20070000 20100000 20090000 20130000 20160000 23874749
+#   Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19830000 20070000 20100000 20090000 20130000 20160000 23853478 
 
 smalltab<-sir.data[!is.na(sir.data$RMALDate),
                    c("PatientID","RMALDate")]
@@ -405,8 +414,8 @@ crea.rep$RenalMalignancy<-ifelse(is.na(crea.rep$DaysSinceRenMal),
 
 calculate_prev(d = crea.rep, column = 'RenalMalignancy')
 
-#   patients_number affected_patients prevalence
-# 1            6257                40 0.00639284
+#   patients_number affected_patients  prevalence
+# 1            6251                40 0.006398976
 
 
 #RENAL TRANSPLANT
@@ -417,8 +426,8 @@ sir.data$RTDate<-ifelse(!sir.data$ReadCode  %in%  transplant1.csv$ReadCode,
                         sir.data$RTDate)
 
 summary(sir.data$RTDate)
-#     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 19890000 20090000 20130000 20100000 20150000 20160000 23874803
+#   Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19890000 20090000 20130000 20100000 20150000 20160000 23853532
 
 smalltab<-sir.data[!is.na(sir.data$RTDate),
                    c("PatientID","RTDate")]
@@ -450,8 +459,8 @@ crea.rep$DaysSinceRT<-difftime(strptime(crea.rep$event.date,format="%Y-%m-%d"),
                         as.numeric()
 
 summary(crea.rep$DaysSinceRT)
-#    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# -5763.0 -1345.0  -150.0   736.5  1578.0 10120.0  300158
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# -5763.0 -1345.0  -150.0   736.5  1578.0 10120.0  299720
 
 crea.rep$DaysSinceRT<-ifelse(crea.rep$DaysSinceRT<0,
                              NA,
@@ -463,7 +472,7 @@ crea.rep$RenalTransplant<-ifelse(is.na(crea.rep$DaysSinceRT),
 
 calculate_prev(d = crea.rep, column = 'RenalTransplant')
 #   patients_number affected_patients  prevalence
-# 1            6257                13 0.002077673
+# 1            6251                13 0.002079667
 
 #CLD
 sir.data$CLDDate<-sir.data$EntryDate 
@@ -473,8 +482,8 @@ sir.data$CLDDate<-ifelse(!sir.data$ReadCode  %in%  Liver1.csv$ReadCode,
                          sir.data$CLDDate) 
 
 summary(sir.data$CLDDate)
-# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
-# 19680000 20060000 20100000 20090000 20140000 20160000 23874659 
+#     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+# 19680000 20060000 20100000 20090000 20140000 20160000 23853388 
 
 smalltab<-sir.data[!is.na(sir.data$CLDDate) & 
                      sir.data$PatientID %in% crea.rep$PatientID,
@@ -507,8 +516,8 @@ crea.rep$DaysSinceCLD<-difftime(strptime(crea.rep$event.date,format="%Y-%m-%d"),
                         as.numeric()
 
 summary(crea.rep$DaysSinceCLD)
-#     Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-# -7602.0 -1245.0   114.0   462.4  1581.0 17720.0  295413
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# -7602.0 -1245.0   114.0   462.4  1581.0 17720.0  294975
 
 crea.rep$DaysSinceCLD<-ifelse(crea.rep$DaysSinceCLD<0,
                               NA,
@@ -521,7 +530,7 @@ crea.rep$CLD<-ifelse(crea.rep$DaysSinceCLD>=0,
 calculate_prev(d = crea.rep, column = 'CLD')
 
 #   patients_number affected_patients prevalence
-# 1            6257               110 0.01758031
+# 1            6251               110 0.01759718
 
 #MATERNITY 
 
@@ -554,7 +563,9 @@ head(first)
 
 names(smalltab)[3]<-"MatDate2"
 
-smalltab<-merge(smalltab[,c(1,3)],first[,c(1,3)],all.x=TRUE)
+smalltab<-merge(smalltab[,c(1,3)],
+                first[,c(1,3)],
+                all.x=TRUE)
 
 smalltab$MatDate2<-as.Date(as.character(smalltab$MatDate2),"%Y%m%d")
 
@@ -605,20 +616,64 @@ summary(crea.rep$EstPregnant)
 save(crea.rep, file = "SIR_crea.repongoing_afterconditions.rda")
 #IF APPLYING A DATE RANGE EXCLUDION, DROP OUT OF RANGE ENTRIES:
 
-crea.rep$BNP_DF<-ifelse(crea.rep$BNPDateFlag==1,NA,crea.rep$BNP)
-crea.rep$NTPROBNP_DF<-ifelse(crea.rep$NTPROBNPDateFlag==1,NA,crea.rep$NTPROBNP)
-crea.rep$SBP_DF<-ifelse(crea.rep$SBPDateFlag==1,NA,crea.rep$SBP)
-crea.rep$DBP_DF<-ifelse(crea.rep$DBPDateFlag==1,NA,crea.rep$DBP)
-crea.rep$HeartRate_DF<-ifelse(crea.rep$HeartRateDateFlag==1,NA,crea.rep$HeartRate)
-crea.rep$BMI_DF<-ifelse(crea.rep$BMIDateFlag==1,NA,crea.rep$BMI)
-crea.rep$SerumAlbumin_DF<-ifelse(crea.rep$SerumAlbuminDateFlag==1,NA,crea.rep$SerumAlbumin)
-crea.rep$UrineAlbumin_DF<-ifelse(crea.rep$UrineAlbuminDateFlag==1,NA,crea.rep$UrineAlbumin)
-crea.rep$UACratio_DF<-ifelse(crea.rep$UACDateFlag==1,NA,crea.rep$UACratio)
-crea.rep$Haemoglobin_DF<-ifelse(crea.rep$HaemDateFlag==1,NA,crea.rep$Haemoglobin)
-crea.rep$MCV_DF<-ifelse(crea.rep$MCVDateFlag==1,NA,crea.rep$MCV)
-crea.rep$SerPotassium_DF<-ifelse(crea.rep$SerPotDateFlag==1,NA,crea.rep$SerPotassium)
-crea.rep$SerumSodium_DF<-ifelse(crea.rep$SerSodDateFlag==1,NA,crea.rep$SerumSodium)
-crea.rep$BUN_DF<-ifelse(crea.rep$BUNDateFlag==1,NA,crea.rep$BUN)
-crea.rep$UricAcid_DF<-ifelse(crea.rep$UricAcidDateFlag==1,NA,crea.rep$UricAcid)
+crea.rep$BNP_DF<-ifelse(crea.rep$BNPDateFlag==1,
+                        NA,
+                        crea.rep$BNP)
+
+crea.rep$NTPROBNP_DF<-ifelse(crea.rep$NTPROBNPDateFlag==1,
+                             NA,
+                             crea.rep$NTPROBNP)
+
+crea.rep$SBP_DF<-ifelse(crea.rep$SBPDateFlag==1,
+                        NA,
+                        crea.rep$SBP)
+
+crea.rep$DBP_DF<-ifelse(crea.rep$DBPDateFlag==1,
+                        NA,
+                        crea.rep$DBP)
+
+crea.rep$HeartRate_DF<-ifelse(crea.rep$HeartRateDateFlag==1,
+                              NA,
+                              crea.rep$HeartRate)
+
+crea.rep$BMI_DF<-ifelse(crea.rep$BMIDateFlag==1,
+                        NA,
+                        crea.rep$BMI)
+
+crea.rep$SerumAlbumin_DF<-ifelse(crea.rep$SerumAlbuminDateFlag==1,
+                                 NA,
+                                 crea.rep$SerumAlbumin)
+
+crea.rep$UrineAlbumin_DF<-ifelse(crea.rep$UrineAlbuminDateFlag==1,
+                                 NA,
+                                 crea.rep$UrineAlbumin)
+
+crea.rep$UACratio_DF<-ifelse(crea.rep$UACDateFlag==1,
+                             NA,
+                             crea.rep$UACratio)
+
+crea.rep$Haemoglobin_DF<-ifelse(crea.rep$HaemDateFlag==1,
+                                NA,
+                                crea.rep$Haemoglobin)
+
+crea.rep$MCV_DF<-ifelse(crea.rep$MCVDateFlag==1,
+                        NA,
+                        crea.rep$MCV)
+
+crea.rep$SerPotassium_DF<-ifelse(crea.rep$SerPotDateFlag==1,
+                                 NA,
+                                 crea.rep$SerPotassium)
+
+crea.rep$SerumSodium_DF<-ifelse(crea.rep$SerSodDateFlag==1,
+                                NA,
+                                crea.rep$SerumSodium)
+
+crea.rep$BUN_DF<-ifelse(crea.rep$BUNDateFlag==1,
+                        NA,
+                        crea.rep$BUN)
+
+crea.rep$UricAcid_DF<-ifelse(crea.rep$UricAcidDateFlag==1,
+                             NA,
+                             crea.rep$UricAcid)
 
 save(crea.rep, file = "SIR_crea.repongoing_afterconditions_lab_flags_applied.rda")
