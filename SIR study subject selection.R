@@ -62,7 +62,9 @@ sir.data <-
     right_join(first, by = "PatientID") %>%
       filter(hfage >= 18)
 
-#length(unique(as.factor(sir.data$PatientID))) #number of patients 18 or over at first diagnosis
+length(unique(sir.data$PatientID))
+#[1] 7209
+
 save(sir.data,file="sirdatahfonly.rda")
 ####################################################################################
 #SELECT PATIENTS WITH CREATININE DATA
@@ -119,7 +121,7 @@ crea<-crea %>%
         filter(!is.na(CodeValue) & CodeValue > 0)
 
 length(unique(crea$PatientID)) #number of hf patients over 18 at diagnosis with creatinine data
-#6970
+#6971
 
 ###########################################################################
 #SENSITIVITY TESTS- HOW MANY ZERO CR VALUES AND HOW MANY CR VALUES UNDER 20
@@ -356,7 +358,7 @@ print(tmp, n = 50)
 # 29     11661     1  1756 1756     1756    1756     1756
 # 30     16060     1     1    1        1       1        1
 # 31     16890     1     2    2        2       2        2
-# We investigated this issue by producing some summary tables showing some statistics on the different types of records that these patients, and others who have other types of records after the supposed death date (total of 851), have after death. We considered as dead all patients with data ceasing with a month to the death date or with only prescription data ceasing in three months. That left us with 120 patients for whom two researchers screened the summary records, identifying that nine had a death code in their records by mistake. In fact, they had any kind of record (e.g. presciptions, exams, diagnosis, ecc) for years.
+# We investigated this issue by producing some summary tables showing some statistics on the different types of records that these patients have, and others who have other types of records after the supposed death date (total of 851), have after death. We considered as dead all patients with data ceasing with a month to the death date or with only prescription data ceasing in three months. That left us with 120 patients for whom two researchers screened the summary records, identifying that nine had a death code in their records by mistake. In fact, they had any kind of record (e.g. presciptions, exams, diagnosis, ecc) for years.
 
 
 patients_to_correct <- c(9203,
@@ -480,10 +482,11 @@ sir.data <- sir.data %>% # remove patients with at least two years follow up
   filter(PatientID %in% range$PatientID)
 
 length(unique(crea.rep$PatientID))
+#[1] 6251
 
 save(crea.rep,file="SIR_crea.rep2yrsall.rda")
 save(sir.data,file="sir.data2yrsall.rda")
-#[1] 6251
+
 
 # # the below introduces duplicates, I am not sure why this was done as well. To look at which practice patients are currently registered to we should look at the latest record
 
