@@ -523,9 +523,9 @@ crea.rep$DaysSinceCLD<-ifelse(crea.rep$DaysSinceCLD<0,
                               NA,
                               crea.rep$DaysSinceCLD)
 
-crea.rep$CLD<-ifelse(crea.rep$DaysSinceCLD>=0,
-                     1,
-                     0)
+crea.rep$CLD<-ifelse(is.na(crea.rep$DaysSinceCLD),
+                     0,
+                     1)
 
 calculate_prev(d = crea.rep, column = 'CLD')
 
