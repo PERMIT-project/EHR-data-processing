@@ -1,80 +1,96 @@
-library(plyr)
-library(lubridate)
-library(tidyverse)
+#library("plyr")
+library("dplyr")
+library("lubridate")
+library("tidyverse")
+library("purrr")
 
-load("crea.rep.rda")
+load("SIR_crea.repongoing_after_formula_variables.rda")
 load("PERMITmeddata28.rda") #LOAD ANNOTATED DRUG TABLE WITH ALL DATED PRECRIPTION ENTRIES PER PATIENT
 
+dataset <- NULL
+
 #LOOP THROUGH DRUGS
-
-for (z in (61:length(unique(meddata$TYPE))) ){
-for (z in (34:length(unique(meddata$TYPE))) ){
-p<-meddata[meddata$TYPE==unique(meddata$TYPE)[z],c("PatientID","TYPE","EntryDate","DAILY_DOSE","END_DATE")]
-smalltab<-crea.rep[crea.rep$PatientID %in% p$PatientID,c("PatientID","event.date")]
-#smalltab is a list of all of the creatinine tests
-#p is a list of all of the prescriptions of the 1 type
-
-p<-p[order(p$EntryDate,decreasing = TRUE), ]
-#checked
-
-#LOOP THROUGH PATIENTS WITH THOSE PRESCRIPTIONS
-#SELECT ALL CREATININE TESTS IN COMPARISON WINDOW
-
-for (i in 1:length(smalltab$event.date)){
-N<-p[p$PatientID==smalltab$PatientID[i],]
-N$event.date<-smalltab$event.date[i]
-N<-N[N$EntryDate<=smalltab$event.date[i] & N$END_DATE>=smalltab$event.date[i],c("PatientID","TYPE","DAILY_DOSE","event.date")]
-N<-N[!(duplicated(N[c(1,4)])),]
-N<-N[!is.na(N$PatientID),]
-
-#REMOVE DUPLICATE ROWS PER PATIENT PER DATE (KEEP MOST RECENT DOSAGE)
-
-#ADD COLUMN HEADERS
-#REMOVE UNWANTED COLUMNS
-
-write.table(N,file=paste0(unique(meddata$TYPE)[z],'NX'),append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") 
-}}
-
-#MANUALLY CHECK AND DELETE (OR PERL) ANY NX FILES WHICH HAVE A SIZE OF 0KB (NO LINES)
-#READ EACH REMAINING TABLE AND MERGE ON TO CREA.REP
-
-allfiles<-list.files(pattern="*NX")
-
-for (a in 1:length(allfiles)) {
-       
-  # if the merged dataset doesn't exist, create it
-  if (!exists("dataset")){
-    dataset <- read.csv(allfiles[a], header=FALSE)
-    dataset <-dataset[,c(1,3,4)]
-        head(dataset)
-names(dataset) <-c("PatientID",paste0(allfiles[a],'_dos',sep=""),"event.date")
-dataset$yn<-1
-names(dataset)[4]<-paste0(allfiles[a],'_yn',sep="")
-dataset$event.date<-as.Date(dataset$event.date,format="%Y-%m-%d")
-dataset$PatientID<-as.character(dataset$PatientID)
-}  
+for (z in (1:length(unique(meddata$TYPE))) ){
+  
+  # keep only data for zth type
+  p<-meddata[meddata$TYPE==unique(meddata$TYPE)[z], 
+             c("PatientID","TYPE","EntryDate","DAILY_DOSE","END_DATE", "EXTRA")]
+  
+  #get only ids and creatinine date
+  smalltab<-crea.rep[crea.rep$PatientID %in% p$PatientID,
+                     c("PatientID","event.date")]
+  
+  #smalltab is a list of all the creatinine tests
+  #p is a list of all of the prescriptions of the zth type
+  
+  p<-p[order(p$EntryDate,decreasing = TRUE), ]
+    
+  N <- p %>%
+        inner_join(smalltab, by = "PatientID") %>% # only patients with data for the zth medication
+          filter(EntryDate < event.date & # only prescription started before the creat measurement 
+                  END_DATE >= event.date) %>% # only prescription still in place at the creat measurement date
+            #select(PatientID,TYPE,DAILY_DOSE,event.date) %>%
+              arrange(PatientID, event.date, EntryDate) %>%
+                group_by(PatientID,TYPE, event.date) %>% # for each patient, type, and creat measurement
+                  summarise(DAILY_DOSE = ifelse(EXTRA[length(EXTRA)] == 1, # check if the last one is EXTRA 
+                                                  ifelse(length(EXTRA) > 1,
+                                                         sum(DAILY_DOSE[(length(EXTRA) - 1): length(EXTRA)]),
+                                                         DAILY_DOSE[length(EXTRA)]), # if not we take the last one
+                                                  DAILY_DOSE[length(EXTRA)]),
+                              EXTRA = EXTRA[length(EXTRA)] == 1) # if yes we sum them
   
   
-  # if the merged dataset does exist, append to it
-  if (exists("dataset")){
-    temp_dataset <-read.csv(allfiles[a], header=FALSE)
-    temp_dataset <-temp_dataset[,c(1,3,4)]
-    head(temp_dataset)
-    names(temp_dataset) <-c("PatientID",paste0(allfiles[a],'_dos',sep=""),"event.date")
+  # add N to dataset
+  if(nrow(N) > 0){
+    
+    temp_dataset <- N %>% 
+                       ungroup() %>% 
+                        select(PatientID, event.date, DAILY_DOSE)
+    
     temp_dataset$yn<-1
-    names(temp_dataset)[4]<-paste0(allfiles[a],'_yn',sep="")
-temp_dataset$event.date<-as.Date(temp_dataset$event.date,format="%Y-%m-%d")
-temp_dataset$PatientID<-as.character(temp_dataset$PatientID)
-dataset<-merge(dataset, temp_dataset,all=TRUE)
+    
+    #check if dataset is not null to add the zth result
+    if(!is.null(dataset)){
+      
+      dataset<-dataset %>% 
+        full_join(temp_dataset, by = c("PatientID", "event.date")) # full join to keep in patients without presc for z
+      
+    } else{
+      
+      dataset <- temp_dataset
+      
+    }
+    
+    
+    # modify name for zth doses
+    colnames(dataset)[colnames(dataset) == "DAILY_DOSE"] <- paste0(unique(meddata$TYPE)[z],
+                                                          '_dos',sep="")
+    # modify bool indicator name for zth
+    colnames(dataset)[colnames(dataset) == "yn"] <- paste0(unique(meddata$TYPE)[z],
+                                                  '_yn',
+                                                  sep="")
+    
+    
     rm(temp_dataset)
-  }
+    
+  } 
  
- 
- dataset$PatientID<-as.factor(dataset$PatientID)
- 
- crea.rep<-merge(crea.rep,dataset,all.x=TRUE)
+}
+
+crea.rep<- crea.rep %>% 
+            left_join(dataset, by = c("PatientID", "event.date")) # add the results to main dataset
 
 
-#NB IF YOU RECEIVE ERROR MESSAGES AFTER THE LOOPS, CHECK THAT OLD VERSIONS OF dataset OR d1 
-#ARE NOT PERSISTENT IN THE ENVIRONMENT
-#IF THIS IS THE CASE, REMOVE WITH rm()
+# fill NAs coming from the joints with zeros
+cols_to_fill <- colnames(dataset)
+
+cols_to_fill <- cols_to_fill[!(cols_to_fill %in% c("PatientID", "event.date"))] # remove first two columns
+
+# for each column to fill
+for(i in 1:length(cols_to_fill)){
+  
+  crea.rep[[cols_to_fill[i]]] <- replace_na(crea.rep[[cols_to_fill[i]]], 0)
+  
+}
+
+save(crea.rep, file = "SIR_crea.repongoing_with_individual_drugs.rda")

@@ -1,356 +1,128 @@
 #ADDS CATEGORICAL DRUG DATA BY DRUG TYPE (E.G. NSAIDS) WHERE LARGE NUMBERS OF DRUG COMBINATIONS ARE CONSIDERED
 #NB APPEND CLAUSES ARE USED IN TABLE FORMATION- IF ERROR MADE, DELETE OUTPUT TABLE BEFORE RERUNNING NEW ITERATIONS
 
-library(stringr)
-library(plyr)
-library(lubridate)
-library(dplyr)
-library(tidyr)
-load("crea.repv10.rda")
-load("PERMITmeddata28.rda")
+library("stringr")
+#library("plyr")
+library("lubridate")
+library("dplyr")
+library("tidyverse")
+
+load("SIR_crea.repongoing_with_individual_drugs.rda")
+load("SIR_PERMITmeddata28.rda")
+
+codes <- read.csv("SIRdrugs.csv")
 
 meddata<-unique(meddata)
+
 meddata$DAILY_DOSE<-signif(meddata$DAILY_DOSE,digits=2)
+
 meddata$FAMILY<-ifelse(meddata$TYPE=="Doxycycline",paste("Antimicrobial"),paste(meddata$FAMILY))
+
 meddata$FAMILY<-ifelse(meddata$TYPE=="Chloretracycline",paste("Chlortetracycline"),paste(meddata$FAMILY))
 ################################################################################################
+# the following piece of code aims at identify each possible combination of drugs and doses fpr each grug family. All unique combinations are then categorised with a two digits system that assigns an integer to each possible drugs combination and an integer to each possible doses combination. These two numbers are separated by . (e.g. 1.2 with 1 referring to the drugs combination and 2 referring to the doses combination). Each category label is unique across the drugs family, but not across the all dataset (e.g. 1.2 means different things for one family and something else for a different one). To go back to the meaning of the category, a lookup table is saved as a csv file.
 
-#FOR EACH DRUG WE OVERWRITE A MINIMAL LIST OF CREATININE MEASUREMENT DATES PER PATIENT (smalltab)
+family_drugs <- codes %>%
+  distinct(FAMILY, TYPE) %>% # get all unique medications per family
+    arrange(FAMILY, TYPE) %>%
+      filter(FAMILY != "")
 
-NSAID<-meddata[meddata$FAMILY=="NSAID",]
-NSAID$EntryDate<-as.Date(NSAID$EntryDate,format="%d/%m/%Y")
-NSAID$END_DATE<-as.Date(NSAID$END_DATE,format="%d/%m/%Y")
-NSAID$check<-paste(NSAID$TYPE,NSAID$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% NSAID$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-NSAID<-NSAID[order(NSAID$EntryDate,decreasing = TRUE), ]
+families <- as.character(unique(family_drugs$FAMILY)) # get all families
 
-#LOOP THROUGH TEST DATES AND MATCH TO PRESCRIPTIONS
+family_prescription_categories <- NULL # initialise look up table
 
-for (i in 1:length(unique(smalltab$event.date))){
-N<-NSAID[NSAID$EntryDate<=smalltab$event.date[i]&NSAID$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$TYPE,N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
+for(i in 1:length(families)){ # for each family
 
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="NSAIDSd.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
+  family_drugs_i <- family_drugs %>%
+    filter(FAMILY == families[i]) # get drugs for each family
+  
+  family_name_i <- str_replace_all(families[i], " ", "")
+  
+  prescription <- rep("", times = nrow(crea.rep))
 
-NS<-read.table("NSAIDSd.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","NSAIDdesc","event.date")
-NSAIDlist<-NS[!duplicated(NS$NSAIDdesc),c("NSAIDdesc")]
-write.csv(NSAIDlist,file="NSAIDlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
+  for(j in 1:nrow(family_drugs_i)){
+    
+    name <- paste(family_drugs_i$TYPE[j],"_dos", sep = "") # create colmun's name to extract
+    
+    vect <- crea.rep[[name]] # extract data
+    
+    if(!is.null(vect)){ # if the column exist
+      prescription <- ifelse(vect != 0, # check if there is an active prescription
+                             str_c(prescription, # append the presciption to previous active ones from the same family on the same row
+                                   family_drugs_i$TYPE[j], 
+                                   vect),
+                             prescription)
+    }
+    
+  }
+  
+  # remove spaces from string
+  prescription <- str_replace_all(prescription, " ", "")
+  
+  #create df to merge later to crea.rep
+  family_prescription <- data_frame(PatientID = crea.rep$PatientID,
+                                    event.date = crea.rep$event.date,
+                                    family_prescription = prescription,
+                                    family = ifelse(prescription != "",
+                                                    1,
+                                                    0)) # TRUE if there is a presctiption
+  
+  # create family prescription categories
+  prescription_unique  <- unique(prescription) %>%
+                            sort()
+  
+  categories <- data_frame(prescription_unique = prescription_unique,
+                           drugs = str_replace_all(prescription_unique, pattern = "[[:digit:]]+\\.*[[:digit:]]*", replacement = ","), #remove all numbers
+                           doses = str_replace_all(prescription_unique, pattern = "[aA-zZ]+", replacement = ",")) %>% # remove all letters
+    mutate(drugs = str_replace(drugs, pattern = "\\,$", replacement = ""), #remove commas at the end
+           doses = str_replace(doses, pattern = "^\\,", replacement = "")) # remove commas at the beginning
+  
+  categories <- data_frame(drugs = unique(categories$drugs)) %>% # get all drugs combinations
+    filter(drugs != "") %>%   
+      mutate(drugs_cat = 1:length(drugs)) %>% # assign cat level
+        right_join(categories, by = "drugs") # add to categories
+  
+  categories <- data_frame(doses = unique(categories$doses)) %>% # get all doses combinations
+    filter(doses != "") %>%   
+      mutate(doses_cat = 1:length(doses)) %>% # assign cat level
+        right_join(categories, by = "doses") # add to categories
+  
+  categories <- categories %>%
+    mutate(prescription_cat = as.numeric(paste(drugs_cat, doses_cat, sep = "."))) %>%  # create prescription cat
+      filter(!is.na(doses_cat)) %>% #remove NA
+        select(prescription_unique, drugs, drugs_cat, doses, doses_cat, prescription_cat) # reorder
+        
+  
+  family_prescription_categories <- bind_rows(family_prescription_categories, # bind to other families drug
+                                              categories  %>% 
+                                                mutate(drugs_family = family_name_i))# assign family name to each row 
+                                                  
+  
+  # we can now join the categories df to the family prescriptions
+  family_prescription <- family_prescription %>%
+    left_join(categories %>% 
+                select(prescription_unique, prescription_cat), 
+              by = c("family_prescription" = "prescription_unique")) %>%
+      mutate(prescription_cat = as.factor(prescription_cat))
+  
+  # we have to change names before joining back to crea.rep so each family has a dedicated column
+  colnames(family_prescription)[colnames(family_prescription) == "prescription_cat"] <- str_c(family_name_i, "cat", sep = "_")
+  colnames(family_prescription)[colnames(family_prescription) == "family_prescription"] <- str_c(family_name_i, "desc") # change names
+  colnames(family_prescription)[colnames(family_prescription) == "family"] <- str_c(as.character(family_name_i), "yn", sep = "_")
+  
+  
+  crea.rep <- crea.rep %>% 
+    left_join(family_prescription,
+              by = c("PatientID", "event.date"))
 
-NS2<-read.csv("NSAIDlist0603.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("NSAIDs","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$NSAIDs<-ifelse(is.na(crea.rep$NSAIDs),0,crea.rep$NSAIDs)
+}
 
-#####################################################################################################
-#Angiotensin Receptor Blockers
-ARB<-meddata[meddata$FAMILY=="ARBs",]
-ARB$EntryDate<-as.Date(ARB$EntryDate,format="%d/
-%m/%Y")
-ARB$END_DATE<-as.Date(ARB$END_DATE,format="%d/%m/%Y")
-ARB$check<-paste(ARB$TYPE,ARB$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% ARB$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-ARB<-ARB[order(ARB$TYPE,ARB$EntryDate,decreasing = TRUE), ]
+# save lookup_table
+family_prescription_categories %>%
+  mutate(prescription_cat_sort = as.numeric(as.character(prescription_cat))) %>% #tmp column to better sort
+    arrange(drugs_family, prescription_cat_sort) %>%
+      select(-prescription_cat_sort) %>%
+        write.csv("family_prescription_categories_lookup.csv", row.names = FALSE)
 
-for (i in 1:length(unique(smalltab$event.date))){
-N<-ARB[ARB$EntryDate<=smalltab$event.date[i]&ARB$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$TYPE,N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
 
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="ARBSd28.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("ARBSd28.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","ARBdesc","event.date")
-ARBlist<-NS[!duplicated(NS$ARBdesc),c("ARBdesc")]
-write.csv(ARBlist,file="ARBlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("ARBlist0603.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("ARBs","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE) 
-crea.rep$ARBs<-ifelse(is.na(crea.rep$ARBs),0,crea.rep$ARBs)
-#################################################################################################
-#ALDOSTERONE ANTAGONISTS
-AA<-meddata[meddata$FAMILY=="ALD_ANT",]
-AA$EntryDate<-as.Date(AA$EntryDate,format="%d/%m/%Y")
-AA$END_DATE<-as.Date(AA$END_DATE,format="%d/%m/%Y")
-AA$check<-paste(AA$TYPE,AA$DAILY_DOSE,sep="")
-crea.rep$event.date<-as.Date(crea.rep$event.date,"%d%m%Y")
-smalltab<-crea.rep[crea.rep$PatientID %in% AA$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-AA<-AA[order(AA$TYPE,AA$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-AA[AA$EntryDate<=smalltab$event.date[i]&AA$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$TYPE,N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="AA.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("AA.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","AAdesc","event.date")
-AAlist<-NS[!duplicated(NS$AAdesc),c("AAdesc")]
-write.csv(AAlist,file="AAlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("AAlist0603.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("Ald_Ant","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$Ald_Ant<-ifelse(is.na(crea.rep$Ald_Ant),0,crea.rep$Ald_Ant)
-##############################################################################################
-#THIAZIDE DIURETICS
-#SOME DOSES APPEAR TO BE ZERO SO CHECK THIS OUT
-
-#THIS IS ONLY A PROBLEM FOR ONE INSTRUCTION AND ONE DRUG
-
-THI<-meddata[meddata$FAMILY=="DIUR_THI",]
-THI$DAILY_DOSE<-signif(THI$DAILY_DOSE,digits=2)
-THI$EntryDate<-as.Date(THI$EntryDate,format="%d/%m/%Y")
-THI$END_DATE<-as.Date(THI$END_DATE,format="%d/%m/%Y")
-THI$check<-paste(THI$TYPE,THI$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% THI$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-THI<-THI[order(THI$TYPE,THI$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-THI[THI$EntryDate<=smalltab$event.date[i]&THI$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$TYPE,N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="THID.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("THID.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-NS<-na.omit(NS)
-colnames(NS) <- c("PatientID","THIdesc","event.date")
-THIlist<-NS[!duplicated(NS$THIdesc),c("THIdesc")]
-write.csv(THIlist,file="THIlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-median(meddata$DAILY_DOSE[meddata$TYPE=="Bendroflumethiazide"],na.rm=TRUE)
-
-NS2<-read.csv("THIlist.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("Thiazide_Diuretics","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$Thiazide_Diuretics<-ifelse(is.na(crea.rep$Thiazide_Diuretics),0,crea.rep$Thiazide_Diuretics)
-
-################################################################################### 
-LOOP<-meddata[meddata$FAMILY=="DIUR_LOOP",]
-LOOP$EntryDate<-as.Date(LOOP$EntryDate,format="%d/%m/%Y")
-LOOP$END_DATE<-as.Date(LOOP$END_DATE,format="%d/%m/%Y")
-LOOP$check<-paste(LOOP$TYPE,LOOP$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% LOOP$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-LOOP<-LOOP[order(LOOP$TYPE,LOOP$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-LOOP[LOOP$EntryDate<=smalltab$event.date[i]&LOOP$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$TYPE,N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="LOOPd.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("LOOPd.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","LOOPdesc","event.date")
-
-#CREATE LIST OF UNIQUE COMBINATIONS OF DRUGS
-LOOPlist<-NS[!duplicated(NS$LOOPdesc),c("LOOPdesc")]
-write.csv(LOOPlist,file="LOOPlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("LOOPlist.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("Loop_Diuretics","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$Loop_Diuretics<-ifelse(is.na(crea.rep$Loop_Diuretics),0,crea.rep$Loop_Diuretics)
-################################################################################### 
-IMM<-meddata[meddata$FAMILY=="Immunosuppressant",]
-IMM$EntryDate<-as.Date(IMM$EntryDate,format="%d/%m/%Y")
-IMM$END_DATE<-as.Date(IMM$END_DATE,format="%d/%m/%Y")
-IMM$check<-paste(IMM$TYPE,IMM$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% IMM$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-IMM<-IMM[order(IMM$TYPE,IMM$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-IMM[IMM$EntryDate<=smalltab$event.date[i]&IMM$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="IMMd.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("IMMd.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","IMMdesc","event.date")
-IMMlist<-NS[!duplicated(NS$IMMdesc),c("IMMdesc")]
-write.csv(IMMlist,file="IMMlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("IMMlist.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("Immunosuppressants","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$Immunosuppressants<-ifelse(is.na(crea.rep$Immunosuppressants),0,crea.rep$Immunosuppressants)
-########################################################################################
-ACEI<-meddata[meddata$FAMILY=="ACEI",]
-ACEI$EntryDate<-as.Date(ACEI$EntryDate,format="%d/%m/%Y")
-ACEI$END_DATE<-as.Date(ACEI$END_DATE,format="%d/%m/%Y")
-ACEI$check<-paste(ACEI$TYPE,ACEI$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% ACEI$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-ACEI<-ACEI[order(ACEI$TYPE,ACEI$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-ACEI[ACEI$EntryDate<=smalltab$event.date[i]&ACEI$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="ACEId.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("ACEId.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","ACEIdesc","event.date")
-ACEIlist<-NS[!duplicated(NS$ACEIdesc),c("ACEIdesc")]
-write.csv(ACEIlist,file="ACEIlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("ACEIlist.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("ACE_Inhibitors","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$ACE_Inhibitors<-ifelse(is.na(crea.rep$ACE_Inhibitors),0,crea.rep$ACE_Inhibitors)
-###########################################################################
-NEP<-meddata[meddata$FAMILY=="Nephrotoxin",]
-NEP$EntryDate<-as.Date(NEP$EntryDate,format="%d/%m/%Y")
-NEP$END_DATE<-as.Date(NEP$END_DATE,format="%d/%m/%Y")
-NEP$check<-paste(NEP$TYPE,NEP$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% NEP$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-NEP<-NEP[order(NEP$TYPE,NEP$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-NEP[NEP$EntryDate<=smalltab$event.date[i]&NEP$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="NEPHd.csv",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("NEPHd.csv",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","NEPdesc","event.date")
-NEPlist<-NS[!duplicated(NS$NEPdesc),c("NEPdesc")]
-write.csv(NEPlist,file="NEPlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("NEPlist.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("Other_Nephrotoxins","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$Other_Nephrotoxins<-ifelse(is.na(crea.rep$Other_Nephrotoxins),0,crea.rep$Other_Nephrotoxins)
-########################################################################
-ANT<-meddata[meddata$FAMILY=="Antimicrobial",]
-ANT$EntryDate<-as.Date(ANT$EntryDate,format="%d/%m/%Y")
-ANT$END_DATE<-as.Date(ANT$END_DATE,format="%d/%m/%Y")
-ANT$check<-paste(ANT$TYPE,ANT$DAILY_DOSE,sep="")
-smalltab<-crea.rep[crea.rep$PatientID %in% ANT$PatientID,c("PatientID","event.date")]
-smalltab<-unique(smalltab)
-ANT<-ANT[order(ANT$TYPE,ANT$EntryDate,decreasing = TRUE), ]
-
-for (i in 1:length(unique(smalltab$event.date))){
-N<-ANT[ANT$EntryDate<=smalltab$event.date[i]&ANT$END_DATE>=smalltab$event.date[i],c("EntryDate","PatientID","TYPE","check")]
-N<-na.omit(N)
-N<-N[order(N$TYPE,N$PatientID,N$EntryDate), ]
-N<-N[!duplicated(N[c("PatientID","TYPE")],fromLast=TRUE),]
-
-P<-N %>%
-group_by(PatientID) %>%
-summarise(outs=paste(na.omit(check),collapse="")) %>%
-data.frame()
-P$event.date<-smalltab$event.date[i]
-P<-P[order(P$PatientID,P$event.date) , ]
-write.table(P,file="ANTd.txt",append=TRUE,row.names=FALSE,col.names=FALSE,sep=",") }
-
-NS<-read.table("ANTd.txt",header=FALSE,sep=",")
-NS<-unique(NS)
-colnames(NS) <- c("PatientID","ANTdesc","event.date")
-
-ANTlist<-NS[!duplicated(NS$ANTdesc),c("ANTdesc")]
-write.csv(ANTlist,file="ANTlist.csv",row.names=FALSE) 
-#ADD DESIRED CATEOGORY ANNOTATIONS TO UNIQUE DRUG COMBINATIONS MANUALLY AS REQUIRED OR USE LOOKUP TABLE/ CODED RULES HERE
-
-NS2<-read.csv("ANTlist.csv")
-NS<-merge(NS,NS2,all.x=TRUE)
-NS<-NS[,c("Antimicrobials","PatientID","event.date")]
-crea.rep<-merge(crea.rep,NS,all.x=TRUE)
-crea.rep$Antimicrobials<-ifelse(is.na(crea.rep$Antimicrobials),0,crea.rep$Antimicrobials)
-
-#CHECK FOR ANY REPEATED ROWS (should be one per patient per date):
-crea.rep[(duplicated(crea.rep[c("PatientID","event.date")]) | duplicated(crea.rep[c("PatientID","event.date")], fromLast = TRUE)), ]
+save(crea.rep, file = "SIR_crea.repongoing_with_drugs_by_family.rda")
