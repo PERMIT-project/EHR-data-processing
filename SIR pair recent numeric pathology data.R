@@ -306,7 +306,7 @@ summarise_units_distribution(sir.data, BUN1.csv$ReadCode)
 
 sir.data$temp<-ifelse(sir.data$ReadCode %in% BUN1.csv$ReadCode & 
                         as.numeric(as.character(sir.data$CodeUnits))>=1 & 
-                        (!is.na(sir.data$temp) | sir.data$temp == 0),
+                        (is.na(sir.data$temp) | sir.data$temp == 0),
                       as.numeric(as.character(sir.data$CodeUnits)),
                       sir.data$temp)
 
@@ -339,7 +339,7 @@ crea.rep$BUN_DF<-ifelse(crea.rep$BUNDateFlag==0,crea.rep$BUN,NA)
 summary(crea.rep$BUN)
 
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-#    3.10    4.40    6.00    6.84    7.00   23.30  299952 
+# 1.000   5.500   7.400   9.104  10.700  50.000     383  
 
 #MEAN DAILY SERUM POTASSIUM #1 MONTH DATE FLAG
 sir.data$temp<-ifelse(sir.data$ReadCode %in% SerumPotassium1.csv$ReadCode,
