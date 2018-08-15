@@ -67,4 +67,11 @@ crea.select <- crea.rep %>%
                        Methotrexate_dos:Acemetacin_yn)
 
 
-save(crea.select, file = "~/Data/Projects/PERMIT/SIR_crea.select_feature_selection_09082018.rda")
+save(crea.select, file = "~/Data/Projects/PERMIT/SIR_crea.select_feature_selection_15082018.rda")
+
+crea.select <- crea.select %>% 
+                filter(TimeSincehf >= 0)
+
+save(crea.select, file = "~/Data/Projects/PERMIT/SIR_crea.select_feature_selection_only_post_hf_15082018.rda")
+
+
